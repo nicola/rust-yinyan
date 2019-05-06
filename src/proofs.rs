@@ -135,6 +135,70 @@ pub fn ni_poke2_verify(
     lhs == rhs
 }
 
+/// NI-PoProd3 Prove
+pub fn ni_poprod_prove(
+    x1: &BigUint,
+    x2: &BigUint,
+    z: &BigUint,
+    g: &BigUint,
+    h: &BigUint,
+    y1: &BigUint,
+    y2: &BigUint,
+    n: &BigUint,
+) -> (BigUint, BigUint, BigUint, BigUint) {
+
+    // l <- H_prime(g, h, y1, y2)
+    let mut to_hash = &g.to_bytes_be();
+    to_hash.extend(&h.to_bytes_be());
+    to_hash.extend(&y1.to_bytes_be());
+    to_hash.extend(&y2.to_bytes_be());
+    let l: BigUint = hash_prime::<_, Blake2b>(&to_hash).into();
+
+    // (q1, q2, q3) = (x1/l, x2/l, z/l)
+    // (r1, r2, r3) = (x1 mod l, x2 mod l, z mod l)
+    let (q1, r1) = x1.div_rem(&l);
+    let (q2, r2) = x2.div_rem(&l);
+    let (q3, _) = z.div_rem(&l);
+
+    // (Q1, Q2, r1, r2, r3) = (h^q1, h^q2 * g^q3)
+    let q_big1 = h.modpow(&q1, n);
+    let q_big2 = h.modpow(&q2, n) * &g.modpow(&q3, n);
+
+    (q_big1, q_big2, r1, r2)
+}
+
+/// NI-PoProd3 Verify
+pub fn ni_poprod_verify(
+    g: &BigUint,
+    h: &BigUint,
+    y1: &BigUint,
+    y2: &BigUint,
+    n: &BigUint,
+    pi: &(BigUint, BigUint, BigUint, BigUint),
+) -> bool {
+    let (q_big1, q_big2, r1, r2) = pi;
+
+    let mut to_hash = &g.to_bytes_be();
+    to_hash.extend(&h.to_bytes_be());
+    to_hash.extend(&y1.to_bytes_be());
+    to_hash.extend(&y2.to_bytes_be());
+    let l: BigUint = hash_prime::<_, Blake2b>(&to_hash).into();
+
+    // r1, r2 < l
+    let range_check = r1 < &l && r2 < &l;
+
+    // r3 = r1 * r2 mod l
+    let r3 = (r1 * r2) % l;
+
+    // Q1^l h^r1 = y1
+    let q1_check = q_big1.modpow(&l, n) * h.modpow(&r1, n) == *y1;
+
+    // Q2^l * h^r2 * g^r3 = y2
+    let q2_check = q_big2.modpow(&l, n) * h.modpow(&r2, n) * g.modpow(&r3, n) == *y2;
+
+    range_check && q1_check && q2_check
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
