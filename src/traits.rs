@@ -119,8 +119,9 @@ pub trait StaticVectorCommitment {
     type Domain;
     type Commitment;
     type BatchCommitment;
+    type Config: Clone + std::fmt::Debug;
 
-    fn setup<T, R>(rng: &mut R, int_size_bits: usize, n: usize) -> Self
+    fn setup<T, R>(rng: &mut R, config: &Self::Config) -> Self
     where
         T: PrimeGroup,
         R: CryptoRng + Rng;

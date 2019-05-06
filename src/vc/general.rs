@@ -5,6 +5,7 @@ use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 
 use crate::traits::*;
+use crate::vc::binary::Config;
 use crate::vc::BinaryVectorCommitment;
 
 pub fn create_vector_commitment<A: UniversalAccumulator + BatchedAccumulator, G: PrimeGroup>(
@@ -12,14 +13,14 @@ pub fn create_vector_commitment<A: UniversalAccumulator + BatchedAccumulator, G:
     n: usize,
 ) -> VectorCommitment<A> {
     let rng = &mut OsRng::new().expect("no secure randomness available");
-    VectorCommitment::<A>::setup::<G, _>(rng, lambda, n)
+    let config = Config { lambda, n };
+    VectorCommitment::<A>::setup::<G, _>(rng, &config)
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VectorCommitment<A: UniversalAccumulator + BatchedAccumulator> {
-    lambda: usize,
-    n: usize,
+    config: <BinaryVectorCommitment<A> as StaticVectorCommitment>::Config,
     vc: BinaryVectorCommitment<A>,
 }
 
@@ -27,16 +28,16 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for Ve
     type Domain = BigUint;
     type Commitment = <BinaryVectorCommitment<A> as StaticVectorCommitment>::BatchCommitment;
     type BatchCommitment = <BinaryVectorCommitment<A> as StaticVectorCommitment>::BatchCommitment;
+    type Config = <BinaryVectorCommitment<A> as StaticVectorCommitment>::Config;
 
-    fn setup<G, R>(rng: &mut R, lambda: usize, n: usize) -> Self
+    fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
         G: PrimeGroup,
         R: CryptoRng + Rng,
     {
         VectorCommitment {
-            lambda,
-            n,
-            vc: BinaryVectorCommitment::<A>::setup::<G, _>(rng, lambda, n),
+            config: config.clone(),
+            vc: BinaryVectorCommitment::<A>::setup::<G, _>(rng, config),
         }
     }
 
@@ -46,23 +47,29 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for Ve
     // vc[a'..., b'..., c'...]
     fn commit(&mut self, ms: &[Self::Domain]) {
         for m in ms {
-            let comm = hash_binary(&m, self.lambda).into_iter().collect::<Vec<_>>();
-            debug_assert!(comm.len() == self.lambda);
+            let comm = hash_binary(&m, self.config.lambda)
+                .into_iter()
+                .collect::<Vec<_>>();
+            debug_assert!(comm.len() == self.config.lambda);
             self.vc.commit(&comm);
         }
     }
 
     fn open(&self, b: &Self::Domain, i: usize) -> Self::Commitment {
-        let comm = hash_binary(b, self.lambda).into_iter().collect::<Vec<_>>();
-        let offset = i * self.lambda;
+        let comm = hash_binary(b, self.config.lambda)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let offset = i * self.config.lambda;
         let is = (0..comm.len()).map(|j| offset + j).collect::<Vec<_>>();
 
         self.vc.batch_open(&comm, &is)
     }
 
     fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Commitment) -> bool {
-        let comm = hash_binary(b, self.lambda).into_iter().collect::<Vec<_>>();
-        let offset = i * self.lambda;
+        let comm = hash_binary(b, self.config.lambda)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let offset = i * self.config.lambda;
         let is = (0..comm.len()).map(|j| offset + j).collect::<Vec<_>>();
 
         self.vc.batch_verify(&comm, &is, pi)
@@ -71,13 +78,15 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for Ve
     fn batch_open(&self, b: &[Self::Domain], is: &[usize]) -> Self::BatchCommitment {
         debug_assert!(b.len() == is.len());
 
-        let mut comm = Vec::with_capacity(self.lambda * b.len());
-        let mut comm_is = Vec::with_capacity(self.lambda * is.len());
+        let mut comm = Vec::with_capacity(self.config.lambda * b.len());
+        let mut comm_is = Vec::with_capacity(self.config.lambda * is.len());
 
         for (el, i) in b.iter().zip(is) {
-            let c = hash_binary(el, self.lambda).into_iter().collect::<Vec<_>>();
+            let c = hash_binary(el, self.config.lambda)
+                .into_iter()
+                .collect::<Vec<_>>();
             comm.extend(&c);
-            let offset = i * self.lambda;
+            let offset = i * self.config.lambda;
             comm_is.extend((0..c.len()).map(|j| offset + j));
         }
 
@@ -87,13 +96,15 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for Ve
     fn batch_verify(&self, b: &[Self::Domain], is: &[usize], pi: &Self::BatchCommitment) -> bool {
         debug_assert!(b.len() == is.len());
 
-        let mut comm = Vec::with_capacity(self.lambda * b.len());
-        let mut comm_is = Vec::with_capacity(self.lambda * is.len());
+        let mut comm = Vec::with_capacity(self.config.lambda * b.len());
+        let mut comm_is = Vec::with_capacity(self.config.lambda * is.len());
 
         for (el, i) in b.iter().zip(is) {
-            let c = hash_binary(el, self.lambda).into_iter().collect::<Vec<_>>();
+            let c = hash_binary(el, self.config.lambda)
+                .into_iter()
+                .collect::<Vec<_>>();
             comm.extend(&c);
-            let offset = i * self.lambda;
+            let offset = i * self.config.lambda;
             comm_is.extend((0..c.len()).map(|j| offset + j));
         }
 
@@ -110,10 +121,10 @@ impl<A: UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment for V
         if b == b_prime {
             // Nothing to do
         } else {
-            let comm = hash_binary(b, self.lambda).into_iter();
-            let comm_prime = hash_binary(b_prime, self.lambda).into_iter();
-            let offset = i * self.lambda;
-            let is = (0..self.lambda).map(|j| offset + j);
+            let comm = hash_binary(b, self.config.lambda).into_iter();
+            let comm_prime = hash_binary(b_prime, self.config.lambda).into_iter();
+            let offset = i * self.config.lambda;
+            let is = (0..self.config.lambda).map(|j| offset + j);
 
             // This is updating bit by bit, but only those bits that actually changed require work.
             for (el, (el_prime, i)) in comm.zip(comm_prime.zip(is)) {

@@ -32,22 +32,29 @@ pub struct BatchCommitment(
     (BigUint, BigUint, (BigUint, BigUint, BigInt), BigUint),
 );
 
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub lambda: usize,
+    pub n: usize,
+}
+
 impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
     for BinaryVectorCommitment<A>
 {
     type Domain = bool;
     type Commitment = Commitment;
     type BatchCommitment = BatchCommitment;
+    type Config = Config;
 
-    fn setup<G, R>(rng: &mut R, lambda: usize, n: usize) -> Self
+    fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
         G: PrimeGroup,
         R: CryptoRng + Rng,
     {
         BinaryVectorCommitment {
-            lambda,
-            n,
-            acc: A::setup::<G, _>(rng, lambda),
+            lambda: config.lambda,
+            n: config.n,
+            acc: A::setup::<G, _>(rng, config.lambda),
             pos: 0,
         }
     }
@@ -211,8 +218,8 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc =
-            BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
         // set two bits manually, to make checks easier
@@ -239,8 +246,8 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc =
-            BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
         vc.commit(&val);
@@ -259,8 +266,8 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc =
-            BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
         // set two bits manually, to make checks easier
