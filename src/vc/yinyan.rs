@@ -13,7 +13,8 @@ use crate::traits::*;
 pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
     lambda: usize, // security param
     k: usize,      // word size
-    n: usize,      // max words in the vector
+    n: usize,      // rsa modulus size
+    size: usize,   // max words in the vector
     uacc: A,
     accs: Vec<(A, A)>, // lenght of accs must be k
     _a: PhantomData<&'a A>,
@@ -40,6 +41,7 @@ pub struct Config {
     pub lambda: usize,
     pub k: usize,
     pub n: usize,
+    pub size: usize,
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
@@ -60,6 +62,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             lambda: config.lambda,
             k: config.k,
             n: config.n,
+            size: config.size,
             uacc: A::setup::<G, _>(rng, config.n),
             accs: (0..config.k)
                 .map(|_| {
@@ -191,15 +194,17 @@ mod tests {
     #[test]
     fn test_yinyan_vc_basics() {
         let lambda = 128;
-        let n = 100;
+        let n = 1024;
         let k = 2;
+        let size = 4;
+
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let config = Config { lambda, k, n };
+        let config = Config { lambda, k, n, size };
         let mut vc =
             YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
-        let mut val: Vec<Vec<bool>> = (0..64).map(|_| {
+        let mut val: Vec<Vec<bool>> = (0..n).map(|_| {
             (0..k).map(|_| rng.gen()).collect()
         }).collect();
         // set two bits manually, to make checks easier
