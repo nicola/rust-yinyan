@@ -184,7 +184,7 @@ mod tests {
     use super::*;
     use crate::accumulator::Accumulator;
     use crate::group::RSAGroup;
-    use crate::vc::BinaryVectorCommitment;
+    use crate::vc::YinYanVectorCommitment;
     use rand_chacha::ChaChaRng;
 
 
@@ -195,7 +195,7 @@ mod tests {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
         let mut vc =
-            BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
+            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
 
         let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
         // set two bits manually, to make checks easier
@@ -212,60 +212,6 @@ mod tests {
         let comm = vc.open(&false, 3);
         assert!(
             vc.verify(&false, 3, &comm),
-            "invalid commitment (bit not set)"
-        );
-    }
-
-    #[test]
-    fn test_binary_vc_batch() {
-        let lambda = 128;
-        let n = 1024;
-        let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-        let config = Config { lambda, n };
-        let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
-
-        let val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
-        vc.commit(&val);
-
-        let committed = vec![val[2].clone(), val[3].clone(), val[9].clone()];
-        let comm = vc.batch_open(&committed, &[2, 3, 9]);
-        assert!(
-            vc.batch_verify(&committed, &[2, 3, 9], &comm),
-            "invalid commitment (bit set)"
-        );
-    }
-
-    #[test]
-    fn test_binary_vc_update() {
-        let lambda = 128;
-        let n = 1024;
-        let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-        let config = Config { lambda, n };
-        let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
-
-        let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
-        // set two bits manually, to make checks easier
-        val[2] = true;
-        val[3] = false;
-
-        vc.commit(&val);
-
-        let comm = vc.open(&true, 2);
-        assert!(vc.verify(&true, 2, &comm), "invalid commitment (bit set)");
-
-        vc.update(&false, &true, 2);
-
-        // ensure old commitment fails now
-        assert!(
-            !vc.verify(&true, 2, &comm),
-            "commitment should be invalid (bit set)"
-        );
-
-        let comm_new = vc.open(&false, 2);
-        assert!(
-            vc.verify(&false, 2, &comm_new),
             "invalid commitment (bit not set)"
         );
     }

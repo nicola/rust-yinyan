@@ -157,7 +157,8 @@ mod tests {
         let n = 1024;
         let rng = &mut ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, &config);
 
         let val: Vec<BigUint> = (0..3).map(|_| rng.gen_biguint(16)).collect();
         vc.commit(&val);
@@ -174,7 +175,8 @@ mod tests {
         let n = 1024;
         let rng = &mut ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, &config);
 
         let val: Vec<BigUint> = (0..4).map(|_| rng.gen_biguint(32)).collect();
         vc.commit(&val);
@@ -193,7 +195,8 @@ mod tests {
         let n = 1024;
         let rng = &mut ChaChaRng::from_seed([0u8; 32]);
 
-        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, lambda, n);
+        let config = Config { lambda, n };
+        let mut vc = VectorCommitment::<Accumulator>::setup::<RSAGroup, _>(rng, &config);
         let val: Vec<BigUint> = (0..4).map(|_| rng.gen_biguint(32)).collect();
 
         vc.commit(&val);
