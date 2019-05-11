@@ -189,7 +189,7 @@ mod tests {
 
 
     #[test]
-    fn test_binary_vc_basics() {
+    fn test_yinyan_vc_basics() {
         let lambda = 128;
         let n = 100;
         let k = 2;
