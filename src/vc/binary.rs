@@ -184,7 +184,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     }
 
     fn state(&self) -> Self::State {
-        self.acc.state()
+        unimplemented!();
+        // self.acc.state()
     }
 }
 

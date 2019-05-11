@@ -10,7 +10,7 @@ use crate::traits::*;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-pub struct YinYanVectorCommitment<'a, A:'a + UniversalAccumulator + BatchedAccumulator> {
+pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
     lambda: usize, // security param
     k: usize,      // word size
     n: usize,      // max words in the vector
@@ -49,20 +49,25 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     type Commitment = Vec<Commitment>;
     type BatchCommitment = BatchCommitment;
     type Config = Config;
-    type State = Vec<(&'a BigUint,&'a BigUint)>;
+    type State = Vec<(&'a BigUint, &'a BigUint)>;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
         G: PrimeGroup,
         R: CryptoRng + Rng,
     {
-        let vc = YinYanVectorCommitment {
+        let mut vc = YinYanVectorCommitment {
             lambda: config.lambda,
             k: config.k,
             n: config.n,
             uacc: A::setup::<G, _>(rng, config.n),
             accs: (0..config.k)
-                .map(|i| (A::setup::<G, _>(rng, config.n), A::setup::<G, _>(rng, config.n)))
+                .map(|| {
+                    (
+                        A::setup::<G, _>(rng, config.n),
+                        A::setup::<G, _>(rng, config.n),
+                    )
+                })
                 .collect(),
             _a: PhantomData,
         };
@@ -153,7 +158,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     }
 }
 
-impl<'a, A:'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
     for YinYanVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
@@ -179,9 +184,9 @@ mod tests {
     use super::*;
     use crate::accumulator::Accumulator;
     use crate::group::RSAGroup;
-    use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaChaRng;
     use crate::vc::BinaryVectorCommitment;
+    use rand_chacha::ChaChaRng;
+
 
     #[test]
     fn test_binary_vc_basics() {

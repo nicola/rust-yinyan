@@ -148,7 +148,7 @@ pub fn ni_poprod_prove(
 ) -> (BigUint, BigUint, BigUint, BigUint) {
 
     // l <- H_prime(g, h, y1, y2)
-    let mut to_hash = &g.to_bytes_be();
+    let mut to_hash = g.to_bytes_be();
     to_hash.extend(&h.to_bytes_be());
     to_hash.extend(&y1.to_bytes_be());
     to_hash.extend(&y2.to_bytes_be());
@@ -178,7 +178,7 @@ pub fn ni_poprod_verify(
 ) -> bool {
     let (q_big1, q_big2, r1, r2) = pi;
 
-    let mut to_hash = &g.to_bytes_be();
+    let mut to_hash = g.to_bytes_be();
     to_hash.extend(&h.to_bytes_be());
     to_hash.extend(&y1.to_bytes_be());
     to_hash.extend(&y2.to_bytes_be());
@@ -188,7 +188,7 @@ pub fn ni_poprod_verify(
     let range_check = r1 < &l && r2 < &l;
 
     // r3 = r1 * r2 mod l
-    let r3 = (r1 * r2) % l;
+    let r3 = (r1 * r2) % &l;
 
     // Q1^l h^r1 = y1
     let q1_check = q_big1.modpow(&l, n) * h.modpow(&r1, n) == *y1;
