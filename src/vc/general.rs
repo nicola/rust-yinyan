@@ -8,10 +8,10 @@ use crate::traits::*;
 use crate::vc::binary::Config;
 use crate::vc::BinaryVectorCommitment;
 
-pub fn create_vector_commitment<A: UniversalAccumulator + BatchedAccumulator, G: PrimeGroup>(
+pub fn create_vector_commitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator, G: PrimeGroup>(
     lambda: usize,
     n: usize,
-) -> VectorCommitment<A> {
+) -> VectorCommitment<'a, A> {
     let rng = &mut OsRng::new().expect("no secure randomness available");
     let config = Config { lambda, n };
     VectorCommitment::<A>::setup::<G, _>(rng, &config)
@@ -19,16 +19,17 @@ pub fn create_vector_commitment<A: UniversalAccumulator + BatchedAccumulator, G:
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-pub struct VectorCommitment<A: UniversalAccumulator + BatchedAccumulator> {
-    config: <BinaryVectorCommitment<A> as StaticVectorCommitment>::Config,
-    vc: BinaryVectorCommitment<A>,
+pub struct VectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
+    config: <BinaryVectorCommitment<'a, A> as StaticVectorCommitment>::Config,
+    vc: BinaryVectorCommitment<'a, A>,
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for VectorCommitment<A> {
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for VectorCommitment<'a, A> {
     type Domain = BigUint;
-    type Commitment = <BinaryVectorCommitment<A> as StaticVectorCommitment>::BatchCommitment;
-    type BatchCommitment = <BinaryVectorCommitment<A> as StaticVectorCommitment>::BatchCommitment;
-    type Config = <BinaryVectorCommitment<A> as StaticVectorCommitment>::Config;
+    type Commitment = <BinaryVectorCommitment<'a, A> as StaticVectorCommitment>::BatchCommitment;
+    type BatchCommitment = <BinaryVectorCommitment<'a, A> as StaticVectorCommitment>::BatchCommitment;
+    type Config = <BinaryVectorCommitment<'a, A> as StaticVectorCommitment>::Config;
+    type State = &'a BigUint;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
@@ -111,12 +112,12 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment for Ve
         self.vc.batch_verify(&comm, &comm_is, pi)
     }
 
-    fn state(&self) -> &BigUint {
+    fn state(&self) -> Self::State {
         self.vc.state()
     }
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment for VectorCommitment<A> {
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment for VectorCommitment<'a, A> {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
         if b == b_prime {
             // Nothing to do

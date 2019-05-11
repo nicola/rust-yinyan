@@ -1,22 +1,22 @@
 use blake2::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use num_bigint::{BigInt, BigUint};
-use num_traits::{One, Zero};
 use rand::CryptoRng;
 use rand::Rng;
+use std::marker::PhantomData;
 
 use crate::hash::hash_prime;
 use crate::traits::*;
-use crate::vc::BinaryVectorCommitment;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-pub struct YinYanVectorCommitment<A: UniversalAccumulator + BatchedAccumulator> {
+pub struct YinYanVectorCommitment<'a, A:'a + UniversalAccumulator + BatchedAccumulator> {
     lambda: usize, // security param
     k: usize,      // word size
     n: usize,      // max words in the vector
     uacc: A,
     accs: Vec<(A, A)>, // lenght of accs must be k
+    _a: PhantomData<&'a A>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -42,13 +42,14 @@ pub struct Config {
     pub n: usize,
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
-    for YinYanVectorCommitment<A>
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
+    for YinYanVectorCommitment<'a, A>
 {
     type Domain = Vec<bool>; // make sure this is of size k
     type Commitment = Vec<Commitment>;
     type BatchCommitment = BatchCommitment;
     type Config = Config;
+    type State = Vec<(&'a BigUint,&'a BigUint)>;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
@@ -59,10 +60,11 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
             lambda: config.lambda,
             k: config.k,
             n: config.n,
-            uacc: A::setup::<G, _>(rng, config),
+            uacc: A::setup::<G, _>(rng, config.n),
             accs: (0..config.k)
-                .map(|i| (A::setup::<G, _>(rng, config), A::setup::<G, _>(rng, config)))
+                .map(|i| (A::setup::<G, _>(rng, config.n), A::setup::<G, _>(rng, config.n)))
                 .collect(),
+            _a: PhantomData,
         };
 
         // Specialization
@@ -132,8 +134,14 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
             })
     }
 
-    fn state(&self) -> &BigUint {
-        self.acc.state()
+    fn state(&self) -> Self::State {
+        unimplemented!()
+        // self.accs.iter().map(|acc|
+        //     (
+        //         acc.0.state(),
+        //         acc.1.state(),
+        //     )
+        // ).collect::<Vec<_>>()
     }
 
     fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment {
@@ -145,17 +153,18 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
     }
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
-    for YinYanVectorCommitment<A>
+impl<'a, A:'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
+    for YinYanVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
-        if b == b_prime {
-            // Nothing to do
-        } else if *b {
-            self.acc.add(&map_i_to_p_i(i));
-        } else {
-            self.acc.del(&map_i_to_p_i(i)).expect("not a member");
-        }
+        unimplemented!();
+        // if b == b_prime {
+        //     // Nothing to do
+        // } else if *b {
+        //     self.acc.add(&map_i_to_p_i(i));
+        // } else {
+        //     self.acc.del(&map_i_to_p_i(i)).expect("not a member");
+        // }
     }
 }
 
@@ -172,6 +181,7 @@ mod tests {
     use crate::group::RSAGroup;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
+    use crate::vc::BinaryVectorCommitment;
 
     #[test]
     fn test_binary_vc_basics() {

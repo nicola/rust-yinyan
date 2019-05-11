@@ -6,14 +6,16 @@ use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Zero};
 use rand::CryptoRng;
 use rand::Rng;
+use std::marker::PhantomData;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-pub struct BinaryVectorCommitment<A: UniversalAccumulator + BatchedAccumulator> {
+pub struct BinaryVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
     lambda: usize,
     n: usize,
     acc: A,
     pos: usize,
+    _a: PhantomData<&'a A>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -38,13 +40,14 @@ pub struct Config {
     pub n: usize,
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
-    for BinaryVectorCommitment<A>
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
+    for BinaryVectorCommitment<'a, A>
 {
     type Domain = bool;
     type Commitment = Commitment;
     type BatchCommitment = BatchCommitment;
     type Config = Config;
+    type State = &'a BigUint;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
@@ -56,6 +59,7 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
             n: config.n,
             acc: A::setup::<G, _>(rng, config.lambda),
             pos: 0,
+            _a: PhantomData,
         }
     }
 
@@ -179,13 +183,13 @@ impl<A: UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
         true
     }
 
-    fn state(&self) -> &BigUint {
+    fn state(&self) -> Self::State {
         self.acc.state()
     }
 }
 
-impl<A: UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
-    for BinaryVectorCommitment<A>
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
+    for BinaryVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
         if b == b_prime {

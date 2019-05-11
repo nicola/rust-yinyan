@@ -120,6 +120,7 @@ pub trait StaticVectorCommitment {
     type Commitment;
     type BatchCommitment;
     type Config: Clone + std::fmt::Debug;
+    type State;
 
     fn setup<T, R>(rng: &mut R, config: &Self::Config) -> Self
     where
@@ -136,7 +137,7 @@ pub trait StaticVectorCommitment {
 
     fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchCommitment) -> bool;
 
-    fn state(&self) -> &BigUint;
+    fn state(&self) -> Self::State;
 }
 
 pub trait DynamicVectorCommitment: StaticVectorCommitment {
