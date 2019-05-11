@@ -62,7 +62,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             n: config.n,
             uacc: A::setup::<G, _>(rng, config.n),
             accs: (0..config.k)
-                .map(|| {
+                .map(|_| {
                     (
                         A::setup::<G, _>(rng, config.n),
                         A::setup::<G, _>(rng, config.n),
