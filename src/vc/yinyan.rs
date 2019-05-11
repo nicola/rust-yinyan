@@ -184,34 +184,38 @@ mod tests {
     use super::*;
     use crate::accumulator::Accumulator;
     use crate::group::RSAGroup;
-    use crate::vc::YinYanVectorCommitment;
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
 
     #[test]
     fn test_binary_vc_basics() {
         let lambda = 128;
-        let n = 1024;
+        let n = 100;
+        let k = 2;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
+        let config = Config { lambda, k, n };
         let mut vc =
-            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, lambda, n);
+            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
-        let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
+        let mut val: Vec<Vec<bool>> = (0..64).map(|_| {
+            (0..k).map(|_| rng.gen()).collect()
+        }).collect();
         // set two bits manually, to make checks easier
-        val[2] = true;
-        val[3] = false;
+        val[2] = vec![true, true];
+        val[3] = vec![false, false];
 
         vc.commit(&val);
 
         // open a set bit
-        let comm = vc.open(&true, 2);
-        assert!(vc.verify(&true, 2, &comm), "invalid commitment (bit set)");
+        let comm = vc.open(&vec![true, true], 2);
+        assert!(vc.verify(&vec![true, true], 2, &comm), "invalid commitment (bit set)");
 
         // open a set bit
-        let comm = vc.open(&false, 3);
+        let comm = vc.open(&vec![false, false], 3);
         assert!(
-            vc.verify(&false, 3, &comm),
+            vc.verify(&vec![false, false], 3, &comm),
             "invalid commitment (bit not set)"
         );
     }
