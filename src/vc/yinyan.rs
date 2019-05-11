@@ -76,7 +76,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         };
 
         // Specialization
-        for i in 0..config.n {
+        for i in 0..config.size {
             // TODO eventually do batchadd (check how we do it in commit)
             vc.uacc.add(&map_i_to_p_i(i));
         }
@@ -216,6 +216,8 @@ mod tests {
         // open a set bit
         let comm = vc.open(&vec![true, true], 2);
         assert!(vc.verify(&vec![true, true], 2, &comm), "invalid commitment (bit set)");
+
+        assert!(!vc.verify(&vec![false, true], 2, &comm), "verification should not pass (bit set)");
 
         // open a set bit
         let comm = vc.open(&vec![false, false], 3);
