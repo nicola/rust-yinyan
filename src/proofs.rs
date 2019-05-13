@@ -135,15 +135,15 @@ pub fn ni_poke2_verify(
     lhs == rhs
 }
 
-/// NI-PoProd3 Prove
+/// NI-PoProd' Prove
 pub fn ni_poprod_prove(
-    x1: &BigUint,
-    x2: &BigUint,
-    z: &BigUint,
     g: &BigUint,
     h: &BigUint,
     y1: &BigUint,
     y2: &BigUint,
+    x1: &BigUint,
+    x2: &BigUint,
+    z: &BigUint,
     n: &BigUint,
 ) -> (BigUint, BigUint, BigUint, BigUint) {
 
@@ -155,7 +155,7 @@ pub fn ni_poprod_prove(
     let l: BigUint = hash_prime::<_, Blake2b>(&to_hash).into();
 
     // (q1, q2, q3) = (x1/l, x2/l, z/l)
-    // (r1, r2, r3) = (x1 mod l, x2 mod l, z mod l)
+    // (r1, r2) = (x1 mod l, x2 mod l)
     let (q1, r1) = x1.div_rem(&l);
     let (q2, r2) = x2.div_rem(&l);
     let (q3, _) = z.div_rem(&l);
@@ -173,8 +173,8 @@ pub fn ni_poprod_verify(
     h: &BigUint,
     y1: &BigUint,
     y2: &BigUint,
-    n: &BigUint,
     pi: &(BigUint, BigUint, BigUint, BigUint),
+    n: &BigUint,
 ) -> bool {
     let (q_big1, q_big2, r1, r2) = pi;
 
@@ -250,4 +250,24 @@ mod tests {
             }
         }
     }
+
+    // #[test]
+    // fn test_ni_poprod() {
+    //     let mut rng = thread_rng();
+
+    //     for i in 1..4 {
+    //         for j in 1..4 {
+    //             for k in 1..4 {
+    //                 let n = rng.gen_biguint(i * 64);
+
+    //                 let x = rng.gen_prime(j * 128);
+    //                 let u = rng.gen_prime(k * 64);
+    //                 let w = u.modpow(&x, &n);
+
+    //                 let pi = ni_poke2_prove(x.clone(), &u, &w, &n);
+    //                 assert!(ni_poke2_verify(&u, &w, &pi, &n))
+    //             }
+    //         }
+    //     }
+    // }
 }

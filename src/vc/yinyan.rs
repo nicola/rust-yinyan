@@ -44,6 +44,19 @@ pub struct Config {
     pub size: usize,
 }
 
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator>
+     YinYanVectorCommitment<'a, A>
+{
+    fn specialize(&mut self, size: usize) {
+        // TODO: if already specialized skip first part
+
+        for i in 0..size {
+            // TODO: eventually do batchadd (check how we do it in commit)
+            self.uacc.add(&map_i_to_p_i(i));
+        }
+    }
+}
+
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
     for YinYanVectorCommitment<'a, A>
 {
@@ -74,12 +87,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
                 .collect(),
             _a: PhantomData,
         };
-
-        // Specialization
-        for i in 0..config.size {
-            // TODO eventually do batchadd (check how we do it in commit)
-            vc.uacc.add(&map_i_to_p_i(i));
-        }
 
         vc
     }
