@@ -1,19 +1,20 @@
 use blake2::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
-use num_bigint::{BigInt, BigUint};
-use rand::CryptoRng;
-use rand::Rng;
+use num_bigint::{BigInt, BigUint, RandBigInt};
+use num_traits::cast::FromPrimitive;
+use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
+
 
 use crate::hash::hash_prime;
 use crate::traits::*;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
-pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
+pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
+{
     lambda: usize, // security param
     k: usize,      // word size
-    n: usize,      // rsa modulus size
     size: usize,   // max words in the vector
     uacc: A,
     accs: Vec<(A, A)>, // lenght of accs must be k
@@ -33,7 +34,7 @@ pub struct BatchCommitment(
     // membership proof
     (BigUint, BigUint),
     // non membership proof
-    (BigUint, BigUint, (BigUint, BigUint, BigInt), BigUint),
+    (BigUint, BigUint, (BigUint, BigUint, BigUint), BigUint),
 );
 
 #[derive(Clone, Debug)]
@@ -44,20 +45,22 @@ pub struct Config {
     pub size: usize,
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator>
-     YinYanVectorCommitment<'a, A>
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
+    YinYanVectorCommitment<'a, A>
 {
-    fn specialize(&mut self, size: usize) {
+    fn specialize(&mut self, size: usize) -> &BigUint {
         // TODO: if already specialized skip first part
 
         for i in 0..size {
             // TODO: eventually do batchadd (check how we do it in commit)
             self.uacc.add(&map_i_to_p_i(i));
         }
+
+        self.uacc.state()
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment
     for YinYanVectorCommitment<'a, A>
 {
     type Domain = Vec<bool>; // make sure this is of size k
@@ -71,31 +74,32 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         G: PrimeGroup,
         R: CryptoRng + Rng,
     {
-        let mut vc = YinYanVectorCommitment {
+        let (modulus, _) = G::generate_primes(rng, config.n).unwrap();
+
+        let two = BigUint::from_u64(2 as u64).unwrap();
+
+        YinYanVectorCommitment {
             lambda: config.lambda,
             k: config.k,
-            n: config.n,
             size: config.size,
-            uacc: A::setup::<G, _>(rng, config.n),
+            uacc: A::from_parts(modulus.clone(), rng.gen_biguint(config.n)),
             accs: (0..config.k)
                 .map(|_| {
+                    let tmp = rng.gen_biguint(config.n);
+                    let g = tmp.modpow(&two, &modulus);
                     (
-                        A::setup::<G, _>(rng, config.n),
-                        A::setup::<G, _>(rng, config.n),
+                        A::from_parts(modulus.clone(), g.clone()),
+                        A::from_parts(modulus.clone(), g),
                     )
                 })
                 .collect(),
             _a: PhantomData,
-        };
-
-        vc
+        }
     }
 
     fn commit(&mut self, m: &[Self::Domain]) {
-        assert!(m.len() == self.n); // TODO: only in the fixed case
-
         for (i, v) in m.iter().enumerate() {
-            assert!(v.len() == self.k);
+            debug_assert!(v.len() == self.k);
             let prime = map_i_to_p_i(i);
 
             // TODO: can be done with batch add!
@@ -168,7 +172,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment
     for YinYanVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
@@ -201,19 +205,18 @@ mod tests {
     #[test]
     fn test_yinyan_vc_basics() {
         let lambda = 128;
-        let n = 1024;
         let k = 2;
+        let n = 1024;
         let size = 4;
 
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
         let config = Config { lambda, k, n, size };
-        let mut vc =
-            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
+        let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
-        let mut val: Vec<Vec<bool>> = (0..n).map(|_| {
-            (0..k).map(|_| rng.gen()).collect()
-        }).collect();
+        let mut val: Vec<Vec<bool>> = (0..size)
+            .map(|_| (0..k).map(|_| rng.gen()).collect())
+            .collect();
         // set two bits manually, to make checks easier
         val[2] = vec![true, true];
         val[3] = vec![false, false];
@@ -222,15 +225,21 @@ mod tests {
 
         // open a set bit
         let comm = vc.open(&vec![true, true], 2);
-        assert!(vc.verify(&vec![true, true], 2, &comm), "invalid commitment (bit set)");
-
-        assert!(!vc.verify(&vec![false, true], 2, &comm), "verification should not pass (bit set)");
-
-        // open a set bit
-        let comm = vc.open(&vec![false, false], 3);
         assert!(
-            vc.verify(&vec![false, false], 3, &comm),
-            "invalid commitment (bit not set)"
+            vc.verify(&vec![true, true], 2, &comm),
+            "invalid commitment (bit set)"
         );
+
+        assert!(
+            !vc.verify(&vec![false, false], 2, &comm),
+            "verification should not pass (bit set)"
+        );
+
+        // // open a set bit
+        // let comm = vc.open(&vec![false, false], 3);
+        // assert!(
+        //     vc.verify(&vec![false, false], 3, &comm),
+        //     "invalid commitment (bit not set)"
+        // );
     }
 }

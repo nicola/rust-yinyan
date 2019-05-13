@@ -35,6 +35,18 @@ pub struct Accumulator {
 
 impl Accumulator {}
 
+impl FromParts for Accumulator {
+    fn from_parts(n: BigUint, g: BigUint) -> Self {
+        Accumulator {
+            int_size_bits: n.bits(),
+            root: g.clone(),
+            g,
+            n,
+            set: BigUint::one(),
+        }
+    }
+}
+
 impl StaticAccumulator for Accumulator {
     /// Returns the current public state.
     fn state(&self) -> &BigUint {

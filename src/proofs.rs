@@ -146,9 +146,6 @@ pub fn ni_poprod_prove(
     z: &BigUint,
     n: &BigUint,
 ) -> (BigUint, BigUint, BigUint, BigUint) {
-
-    assert!(*z == x1 * x2);
-
     // l <- H_prime(g, h, y1, y2)
     let mut to_hash = g.to_bytes_be();
     to_hash.extend(&h.to_bytes_be());
@@ -164,7 +161,7 @@ pub fn ni_poprod_prove(
 
     // (Q1, Q2, r1, r2, r3) = (h^q1, h^q2 * g^q3)
     let q_big1 = h.modpow(&q1, n);
-    let q_big2 = h.modpow(&q2, n) * &g.modpow(&q3, n);
+    let q_big2 = h.modpow(&q2, n) * &g.modpow(&q3, n) % n;
 
     (q_big1, q_big2, r1, r2)
 }
@@ -193,10 +190,17 @@ pub fn ni_poprod_verify(
     let r3 = (r1 * r2) % &l;
 
     // Q1^l h^r1 = y1
-    let q1_check = q_big1.modpow(&l, n) * h.modpow(&r1, n) == *y1;
+    let q1_check = {
+        let lhs = (q_big1.modpow(&l, n) * h.modpow(&r1, n)) % n;
+        lhs == *y1
+    };
 
     // Q2^l * h^r2 * g^r3 = y2
-    let q2_check = q_big2.modpow(&l, n) * h.modpow(&r2, n) * g.modpow(&r3, n) == *y2;
+    let q2_check = {
+        let tmp = q_big2.modpow(&l, n) * h.modpow(&r2, n) % n;
+        let lhs = tmp * g.modpow(&r3, n) % n;
+        lhs == *y2
+    };
 
     range_check && q1_check && q2_check
 }
@@ -262,21 +266,27 @@ mod tests {
     fn test_ni_poprod() {
         let mut rng = thread_rng();
 
-        let n = rng.gen_biguint(1024);
+        for i in 1..10 {
+            let n = rng.gen_biguint(1024);
 
-        let g = rng.gen_biguint(1024) % &n;
-        let h = rng.gen_biguint(1024) % &n;
+            let g = rng.gen_biguint(1024) % &n;
+            let h = rng.gen_biguint(1024) % &n;
 
-        let x1 = rng.gen_biguint(128);
-        let x2 = rng.gen_biguint(128);
-        let z = &x1 * &x2;
+            let x1 = rng.gen_biguint(128);
+            let x2 = rng.gen_biguint(128);
+            let z = &x1 * &x2;
 
-        // h^x1
-        let y1 = h.modpow(&x1, &n);
-        // h^x2 * g^z
-        let y2 = h.modpow(&x2, &n) * g.modpow(&z, &n);
+            // h^x1
+            let y1 = h.modpow(&x1, &n);
+            // h^x2 * g^z
+            let y2 = h.modpow(&x2, &n) * g.modpow(&z, &n) % &n;
 
-        let pi = ni_poprod_prove(&g, &h, &y1, &y2, &x1, &x2, &z, &n);
-        assert!(ni_poprod_verify(&g, &h, &y1, &y2, &pi, &n))
+            let pi = ni_poprod_prove(&g, &h, &y1, &y2, &x1, &x2, &z, &n);
+            assert!(ni_poprod_verify(&g, &h, &y1, &y2, &pi, &n));
+
+            let z_fake = rng.gen_biguint(128) * rng.gen_biguint(128);
+            let pi_fake = ni_poprod_prove(&g, &h, &y1, &y2, &x1, &x2, &z_fake, &n);
+            assert!(!ni_poprod_verify(&g, &h, &y1, &y2, &pi_fake, &n));
+        }
     }
 }

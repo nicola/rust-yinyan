@@ -3,6 +3,10 @@ use num_bigint::{BigInt, BigUint};
 use rand::CryptoRng;
 use rand::Rng;
 
+pub trait FromParts: StaticAccumulator {
+    fn from_parts(modulus: BigUint, generator: BigUint) -> Self;
+}
+
 pub trait StaticAccumulator {
     /// Setup generates a group of unknown order and initializes the group
     /// with a generator of that group.
