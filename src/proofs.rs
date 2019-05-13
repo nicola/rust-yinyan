@@ -147,6 +147,8 @@ pub fn ni_poprod_prove(
     n: &BigUint,
 ) -> (BigUint, BigUint, BigUint, BigUint) {
 
+    assert!(*z == x1 * x2);
+
     // l <- H_prime(g, h, y1, y2)
     let mut to_hash = g.to_bytes_be();
     to_hash.extend(&h.to_bytes_be());
@@ -245,29 +247,36 @@ mod tests {
                     let w = u.modpow(&x, &n);
 
                     let pi = ni_poke2_prove(x.clone(), &u, &w, &n);
-                    assert!(ni_poke2_verify(&u, &w, &pi, &n))
+                    assert!(ni_poke2_verify(&u, &w, &pi, &n));
+
+                    let x_fake = rng.gen_prime(j * 128);
+                    let w_fake = u.modpow(&x_fake, &n);
+                    let pi_fake = ni_poke2_prove(x_fake.clone(), &u, &w_fake, &n);
+                    assert!(!ni_poke2_verify(&u, &w, &pi_fake, &n));
                 }
             }
         }
     }
 
-    // #[test]
-    // fn test_ni_poprod() {
-    //     let mut rng = thread_rng();
+    #[test]
+    fn test_ni_poprod() {
+        let mut rng = thread_rng();
 
-    //     for i in 1..4 {
-    //         for j in 1..4 {
-    //             for k in 1..4 {
-    //                 let n = rng.gen_biguint(i * 64);
+        let n = rng.gen_biguint(1024);
 
-    //                 let x = rng.gen_prime(j * 128);
-    //                 let u = rng.gen_prime(k * 64);
-    //                 let w = u.modpow(&x, &n);
+        let g = rng.gen_biguint(1024) % &n;
+        let h = rng.gen_biguint(1024) % &n;
 
-    //                 let pi = ni_poke2_prove(x.clone(), &u, &w, &n);
-    //                 assert!(ni_poke2_verify(&u, &w, &pi, &n))
-    //             }
-    //         }
-    //     }
-    // }
+        let x1 = rng.gen_biguint(128);
+        let x2 = rng.gen_biguint(128);
+        let z = &x1 * &x2;
+
+        // h^x1
+        let y1 = h.modpow(&x1, &n);
+        // h^x2 * g^z
+        let y2 = h.modpow(&x2, &n) * g.modpow(&z, &n);
+
+        let pi = ni_poprod_prove(&g, &h, &y1, &y2, &x1, &x2, &z, &n);
+        assert!(ni_poprod_verify(&g, &h, &y1, &y2, &pi, &n))
+    }
 }
