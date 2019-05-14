@@ -5,7 +5,6 @@ use num_traits::cast::FromPrimitive;
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
 
-
 use crate::hash::hash_prime;
 use crate::traits::*;
 
@@ -60,7 +59,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment<'a>
     for YinYanVectorCommitment<'a, A>
 {
     type Domain = Vec<bool>; // make sure this is of size k
@@ -153,14 +152,11 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             })
     }
 
-    fn state(&self) -> Self::State {
-        let iter = self.accs.iter();
-        iter.map(|acc|
-            (
-                acc.0.state(),
-                acc.1.state(),
-            )
-        ).collect::<Self::State>()
+    fn state(&'a self) -> Self::State {
+        self.accs
+            .iter()
+            .map(|acc| (acc.0.state(), acc.1.state()))
+            .collect()
     }
 
     fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment {
@@ -172,7 +168,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment<'a>
     for YinYanVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
@@ -200,7 +196,6 @@ mod tests {
     use crate::group::RSAGroup;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
-
 
     #[test]
     fn test_yinyan_vc_basics() {

@@ -40,7 +40,7 @@ pub struct Config {
     pub n: usize,
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment<'a>
     for BinaryVectorCommitment<'a, A>
 {
     type Domain = bool;
@@ -183,13 +183,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         true
     }
 
-    fn state(&self) -> Self::State {
-        unimplemented!();
-        // self.acc.state()
+    fn state(&'a self) -> Self::State {
+        self.acc.state()
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitment<'a>
     for BinaryVectorCommitment<'a, A>
 {
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {

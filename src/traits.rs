@@ -119,7 +119,7 @@ pub trait BatchedAccumulator: StaticAccumulator {
     ) -> bool;
 }
 
-pub trait StaticVectorCommitment {
+pub trait StaticVectorCommitment<'a> {
     type Domain;
     type Commitment;
     type BatchCommitment;
@@ -141,10 +141,10 @@ pub trait StaticVectorCommitment {
 
     fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchCommitment) -> bool;
 
-    fn state(&self) -> Self::State;
+    fn state(&'a self) -> Self::State;
 }
 
-pub trait DynamicVectorCommitment: StaticVectorCommitment {
+pub trait DynamicVectorCommitment<'a>: StaticVectorCommitment<'a> {
     /// Changes the value at position `i`, from `b_prime`  to `b`.
     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize);
 }
