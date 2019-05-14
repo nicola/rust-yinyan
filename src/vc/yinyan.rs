@@ -2,12 +2,12 @@ use blake2::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use num_bigint::{BigInt, BigUint, RandBigInt};
 use num_traits::cast::FromPrimitive;
-use rand::{CryptoRng, Rng};
-use std::marker::PhantomData;
-use crate::proofs;
 use num_traits::identities::One;
+use std::marker::PhantomData;
+use rand::{CryptoRng, Rng};
 
 use crate::hash::hash_prime;
+use crate::proofs;
 use crate::traits::*;
 
 // pub struct AccTradeoff {
@@ -50,7 +50,7 @@ type Proof = Vec<BigUint>;
 
 pub struct Commitment {
     pub states: Vec<(BigUint, BigUint)>,
-    pub prods: Vec<proofs::PoprodProof>
+    pub prods: Vec<proofs::PoprodProof>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -152,32 +152,37 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
 
         let g = self.uacc.g();
         let (U_n, u) = (self.uacc.state(), self.uacc.set());
-        
-        self.prod_proofs = self.accs.iter().map(|acc| {
-            let g_j = acc.0.g();
-            let (A_j, a_j) = (acc.0.state(), acc.0.set() );
-            let (B_j, b_j) = (acc.0.state(), acc.0.set() );
-            proofs::ni_poprod_prove(
-                g,
-                g_j,
-                A_j,
-                &((B_j * U_n) % &self.modulus),
-                a_j,
-                b_j,
-                u,
-                &self.modulus,
-            )
-        }).collect();
 
 
+        self.prod_proofs = self
+            .accs
+            .iter()
+            .map(|acc| {
+                let g_j = acc.0.g();
+                let (A_j, a_j) = (acc.0.state(), acc.0.set());
+                let (B_j, b_j) = (acc.0.state(), acc.0.set());
+                proofs::ni_poprod_prove(
+                    g,
+                    g_j,
+                    A_j,
+                    &((B_j * U_n) % &self.modulus),
+                    a_j,
+                    b_j,
+                    u,
+                    &self.modulus,
+                )
+            })
+            .collect();
         // let pi = m.iter().map(|| {
         //     proofs::ni_poprod_prove(self.uacc.g, h: &BigUint, y1: &BigUint, y2: &BigUint, x1: &BigUint, x2: &BigUint, z: &BigUint, n: &BigUint)
         // }).collect()
 
         // TODO: generate pi_prod
 
-        Self::Commitment{
-            states: self.state().iter()
+        Self::Commitment {
+            states: self
+                .state()
+                .iter()
                 .map(|acc| (acc.0.clone(), acc.1.clone()))
                 .collect(),
             prods: self.prod_proofs.clone(),
@@ -187,7 +192,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
         let p_i = map_i_to_p_i(i);
 
-        let proof : Proof = b.iter()
+        let proof: Proof = b
+            .iter()
             .zip(self.accs.iter())
             .map(|(bit, acc)| {
                 if *bit {
