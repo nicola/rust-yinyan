@@ -148,19 +148,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                         acc.0.ver_mem(v, &p_i)
                     }
                 } else {
-                    false
+                    false // TODO: re-org this code
                 }
             })
     }
 
     fn state(&self) -> Self::State {
-        unimplemented!()
-        // self.accs.iter().map(|acc|
-        //     (
-        //         acc.0.state(),
-        //         acc.1.state(),
-        //     )
-        // ).collect::<Vec<_>>()
+        let iter = self.accs.iter();
+        iter.map(|acc|
+            (
+                acc.0.state(),
+                acc.1.state(),
+            )
+        ).collect::<Self::State>()
     }
 
     fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment {
@@ -234,12 +234,5 @@ mod tests {
             !vc.verify(&vec![false, false], 2, &comm),
             "verification should not pass (bit set)"
         );
-
-        // // open a set bit
-        // let comm = vc.open(&vec![false, false], 3);
-        // assert!(
-        //     vc.verify(&vec![false, false], 3, &comm),
-        //     "invalid commitment (bit not set)"
-        // );
     }
 }
