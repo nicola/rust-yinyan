@@ -32,11 +32,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     for VectorCommitment<'a, A>
 {
     type Domain = BigUint;
-    type Commitment =
-        <BinaryVectorCommitment<'a, A> as StaticVectorCommitment<'a>>::BatchCommitment;
-    type BatchCommitment =
-        <BinaryVectorCommitment<'a, A> as StaticVectorCommitment<'a>>::BatchCommitment;
+    type Proof =
+        <BinaryVectorCommitment<'a, A> as StaticVectorCommitment<'a>>::BatchProof;
+    type BatchProof =
+        <BinaryVectorCommitment<'a, A> as StaticVectorCommitment<'a>>::BatchProof;
     type Config = <BinaryVectorCommitment<'a, A> as StaticVectorCommitment<'a>>::Config;
+    type Commitment = BigUint;
     type State = &'a BigUint;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
@@ -54,7 +55,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     // ms: [a, b, c]
     // a' = hash_binary(a), b' ..
     // vc[a'..., b'..., c'...]
-    fn commit(&mut self, ms: &[Self::Domain]) {
+    fn commit(&mut self, ms: &[Self::Domain]) -> Self::Commitment {
         for m in ms {
             let comm = hash_binary(&m, self.config.lambda)
                 .into_iter()
@@ -62,9 +63,10 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             debug_assert!(comm.len() == self.config.lambda);
             self.vc.commit(&comm);
         }
+        self.vc.state().clone()
     }
 
-    fn open(&self, b: &Self::Domain, i: usize) -> Self::Commitment {
+    fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
         let comm = hash_binary(b, self.config.lambda)
             .into_iter()
             .collect::<Vec<_>>();
@@ -74,7 +76,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         self.vc.batch_open(&comm, &is)
     }
 
-    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Commitment) -> bool {
+    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
         let comm = hash_binary(b, self.config.lambda)
             .into_iter()
             .collect::<Vec<_>>();
@@ -84,7 +86,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         self.vc.batch_verify(&comm, &is, pi)
     }
 
-    fn batch_open(&self, b: &[Self::Domain], is: &[usize]) -> Self::BatchCommitment {
+    fn batch_open(&self, b: &[Self::Domain], is: &[usize]) -> Self::BatchProof {
         debug_assert!(b.len() == is.len());
 
         let mut comm = Vec::with_capacity(self.config.lambda * b.len());
@@ -102,7 +104,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         self.vc.batch_open(&comm, &comm_is)
     }
 
-    fn batch_verify(&self, b: &[Self::Domain], is: &[usize], pi: &Self::BatchCommitment) -> bool {
+    fn batch_verify(&self, b: &[Self::Domain], is: &[usize], pi: &Self::BatchProof) -> bool {
         debug_assert!(b.len() == is.len());
 
         let mut comm = Vec::with_capacity(self.config.lambda * b.len());

@@ -46,6 +46,12 @@ use crate::traits::*;
 //     }
 // }
 
+type Proof = Vec<BigUint>;
+
+pub struct Commitment {
+    pub states: Vec<(BigUint, BigUint)>,
+    pub prods: Vec<proofs::PoprodProof>
+}
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -57,25 +63,9 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     uacc: A,
     accs: Vec<(A, A)>, // lenght of accs must be k
     _a: PhantomData<&'a A>,
-    prod_proofs: Vec<(BigUint, BigUint, BigUint, BigUint)>,
+    prod_proofs: Vec<proofs::PoprodProof>,
     modulus: BigUint,
 }
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Commitment {
-    Mem(BigUint),
-    NonMem(BigUint),
-}
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BatchCommitment(
-    // membership proof
-    (BigUint, BigUint),
-    // non membership proof
-    (BigUint, BigUint, (BigUint, BigUint, BigUint), BigUint),
-);
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -103,10 +93,11 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     for YinYanVectorCommitment<'a, A>
 {
     type Domain = Vec<bool>; // make sure this is of size k
-    type Commitment = Vec<Commitment>;
-    type BatchCommitment = BatchCommitment;
+    type Proof = Proof;
+    type BatchProof = Vec<BigUint>;
     type Config = Config;
     type State = Vec<(&'a BigUint, &'a BigUint)>;
+    type Commitment = Commitment;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
     where
@@ -138,7 +129,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         }
     }
 
-    fn commit(&mut self, m: &[Self::Domain]) {
+    fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment {
         // i = 0..m (m number of words)
         for (i, v) in m.iter().enumerate() {
             debug_assert!(v.len() == self.k);
@@ -184,38 +175,43 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         // }).collect()
 
         // TODO: generate pi_prod
+
+        Self::Commitment{
+            states: self.state().iter()
+                .map(|acc| (acc.0.clone(), acc.1.clone()))
+                .collect(),
+            prods: self.prod_proofs.clone(),
+        }
     }
 
-    fn open(&self, b: &Self::Domain, i: usize) -> Self::Commitment {
+    fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
         let p_i = map_i_to_p_i(i);
 
-        b.iter()
+        let proof : Proof = b.iter()
             .zip(self.accs.iter())
             .map(|(bit, acc)| {
                 if *bit {
-                    Commitment::Mem(acc.1.mem_wit_create(&p_i))
+                    acc.1.mem_wit_create(&p_i)
                 } else {
-                    Commitment::Mem(acc.0.mem_wit_create(&p_i))
+                    acc.0.mem_wit_create(&p_i)
                 }
             })
-            .collect()
+            .collect();
+
+        proof
     }
 
-    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Commitment) -> bool {
+    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
         let p_i = map_i_to_p_i(i);
 
         b.iter()
             .zip(self.accs.iter())
             .zip(pi.iter())
             .all(|((bit, acc), w)| {
-                if let Commitment::Mem(v) = w {
-                    if *bit {
-                        acc.1.ver_mem(v, &p_i)
-                    } else {
-                        acc.0.ver_mem(v, &p_i)
-                    }
+                if *bit {
+                    acc.1.ver_mem(w, &p_i)
                 } else {
-                    false // TODO: re-org this code
+                    acc.0.ver_mem(w, &p_i)
                 }
             })
     }
@@ -227,11 +223,11 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             .collect()
     }
 
-    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment {
+    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchProof {
         unimplemented!();
     }
 
-    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchCommitment) -> bool {
+    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchProof) -> bool {
         unimplemented!();
     }
 }

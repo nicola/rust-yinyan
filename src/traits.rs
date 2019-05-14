@@ -124,7 +124,8 @@ pub trait BatchedAccumulator: StaticAccumulator {
 pub trait StaticVectorCommitment<'a> {
     type Domain;
     type Commitment;
-    type BatchCommitment;
+    type Proof;
+    type BatchProof;
     type Config: Clone + std::fmt::Debug;
     type State;
 
@@ -133,15 +134,15 @@ pub trait StaticVectorCommitment<'a> {
         T: PrimeGroup,
         R: CryptoRng + Rng;
 
-    fn commit(&mut self, m: &[Self::Domain]);
+    fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment;
 
-    fn open(&self, b: &Self::Domain, i: usize) -> Self::Commitment;
+    fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof;
 
-    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Commitment) -> bool;
+    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool;
 
-    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment;
+    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchProof;
 
-    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchCommitment) -> bool;
+    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchProof) -> bool;
 
     fn state(&'a self) -> Self::State;
 }

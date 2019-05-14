@@ -134,6 +134,7 @@ pub fn ni_poke2_verify(
 
     lhs == rhs
 }
+pub type PoprodProof = (BigUint, BigUint, BigUint, BigUint);
 
 /// NI-PoProd' Prove
 pub fn ni_poprod_prove(
@@ -145,7 +146,7 @@ pub fn ni_poprod_prove(
     x2: &BigUint,
     z: &BigUint,
     n: &BigUint,
-) -> (BigUint, BigUint, BigUint, BigUint) {
+) -> PoprodProof {
     // l <- H_prime(g, h, y1, y2)
     let mut to_hash = g.to_bytes_be();
     to_hash.extend(&h.to_bytes_be());
@@ -163,7 +164,7 @@ pub fn ni_poprod_prove(
     let q_big1 = h.modpow(&q1, n);
     let q_big2 = h.modpow(&q2, n) * &g.modpow(&q3, n) % n;
 
-    (q_big1, q_big2, r1, r2)
+    (q_big1, q_big2, r1, r2) as PoprodProof
 }
 
 /// NI-PoProd3 Verify
@@ -172,7 +173,7 @@ pub fn ni_poprod_verify(
     h: &BigUint,
     y1: &BigUint,
     y2: &BigUint,
-    pi: &(BigUint, BigUint, BigUint, BigUint),
+    pi: &PoprodProof,
     n: &BigUint,
 ) -> bool {
     let (q_big1, q_big2, r1, r2) = pi;

@@ -20,14 +20,14 @@ pub struct BinaryVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Commitment {
+pub enum Proof {
     Mem(BigUint),
     NonMem((BigUint, BigInt)),
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BatchCommitment(
+pub struct BatchProof(
     // membership proof
     (BigUint, BigUint),
     // non membership proof
@@ -44,9 +44,10 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     for BinaryVectorCommitment<'a, A>
 {
     type Domain = bool;
-    type Commitment = Commitment;
-    type BatchCommitment = BatchCommitment;
+    type Proof = Proof;
+    type BatchProof = BatchProof;
     type Config = Config;
+    type Commitment = BigUint;
     type State = &'a BigUint;
 
     fn setup<G, R>(rng: &mut R, config: &Self::Config) -> Self
@@ -63,7 +64,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         }
     }
 
-    fn commit(&mut self, m: &[Self::Domain]) {
+    fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment {
         let primes = m
             .iter()
             .enumerate()
@@ -73,36 +74,38 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
 
         self.pos += m.len();
         self.acc.batch_add(&primes);
+
+        self.acc.state().clone()
     }
 
-    fn open(&self, b: &Self::Domain, i: usize) -> Self::Commitment {
+    fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
         let p_i = map_i_to_p_i(i);
 
         if *b {
-            Commitment::Mem(self.acc.mem_wit_create(&p_i))
+            Proof::Mem(self.acc.mem_wit_create(&p_i))
         } else {
             let p = self.acc.non_mem_wit_create(&p_i);
-            Commitment::NonMem(p)
+            Proof::NonMem(p)
         }
     }
 
-    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Commitment) -> bool {
+    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
         let p_i = map_i_to_p_i(i);
 
         if *b {
             match pi {
-                Commitment::Mem(v) => self.acc.ver_mem(v, &p_i),
-                Commitment::NonMem(_) => false,
+                Proof::Mem(v) => self.acc.ver_mem(v, &p_i),
+                Proof::NonMem(_) => false,
             }
         } else {
             match pi {
-                Commitment::Mem(_) => false,
-                Commitment::NonMem(v) => self.acc.ver_non_mem(&v, &p_i),
+                Proof::Mem(_) => false,
+                Proof::NonMem(v) => self.acc.ver_non_mem(&v, &p_i),
             }
         }
     }
 
-    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchCommitment {
+    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchProof {
         debug_assert!(b.len() == i.len());
 
         let ones = b
@@ -144,10 +147,10 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             self.acc.non_mem_wit_create_star(&p_zeros)
         };
 
-        BatchCommitment(pi_i, pi_e)
+        BatchProof(pi_i, pi_e)
     }
 
-    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchCommitment) -> bool {
+    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchProof) -> bool {
         debug_assert!(b.len() == i.len());
 
         let ones = b
