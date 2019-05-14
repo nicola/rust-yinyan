@@ -4,9 +4,48 @@ use num_bigint::{BigInt, BigUint, RandBigInt};
 use num_traits::cast::FromPrimitive;
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
+use crate::proofs;
+use num_traits::identities::One;
 
 use crate::hash::hash_prime;
 use crate::traits::*;
+
+// pub struct AccTradeoff {
+//     g: BigUint,
+//     n: BigUint,
+//     root: BigUint,
+// }
+// impl StaticAccumulator for AccTradeoff {
+//     #[inline]
+//     fn setup<T, R>(rng: &mut R, int_size_bits: usize) -> Self
+//     where
+//         T: PrimeGroup,
+//         R: CryptoRng + Rng,
+//     {
+//         unimplemented!()
+//     }
+
+//     #[inline]
+//     fn mem_wit_create(&self, x: &BigUint) -> BigUint {
+//         unimplemented!()
+//     }
+
+//     #[inline]
+//     fn ver_mem(&self, w: &BigUint, x: &BigUint) -> bool {
+//         w.modpow(x, &self.n) == self.root
+//     }
+
+//     #[inline]
+//     fn state(&self) -> &BigUint {
+//         &self.root
+//     }
+//     #[inline]
+//     fn add(&mut self, x: &BigUint) {
+//         // assumes x is already a prime
+//         self.root = self.root.modpow(x, &self.n);
+//     }
+// }
+
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -18,6 +57,8 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     uacc: A,
     accs: Vec<(A, A)>, // lenght of accs must be k
     _a: PhantomData<&'a A>,
+    prod_proofs: Vec<(BigUint, BigUint, BigUint, BigUint)>,
+    modulus: BigUint,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -49,7 +90,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 {
     fn specialize(&mut self, size: usize) -> &BigUint {
         // TODO: if already specialized skip first part
-
         for i in 0..size {
             // TODO: eventually do batchadd (check how we do it in commit)
             self.uacc.add(&map_i_to_p_i(i));
@@ -81,6 +121,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             lambda: config.lambda,
             k: config.k,
             size: config.size,
+            modulus: modulus.clone(),
+            prod_proofs: vec![],
             uacc: A::from_parts(modulus.clone(), rng.gen_biguint(config.n)),
             accs: (0..config.k)
                 .map(|_| {
@@ -97,22 +139,48 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn commit(&mut self, m: &[Self::Domain]) {
+        // i = 0..m (m number of words)
         for (i, v) in m.iter().enumerate() {
             debug_assert!(v.len() == self.k);
+
+            // p_i
             let prime = map_i_to_p_i(i);
 
+            // j = 0..k (k number of bits in each word)
             // TODO: can be done with batch add!
             for (bit, acc) in v.iter().zip(self.accs.iter_mut()) {
                 if *bit {
+                    // B_j
                     acc.1.add(&prime);
                 } else {
+                    // A_j
                     acc.0.add(&prime);
                 }
             }
         }
 
+        let g = self.uacc.g();
+        let (U_n, u) = (self.uacc.state(), self.uacc.set());
+        
+        self.prod_proofs = self.accs.iter().map(|acc| {
+            let g_j = acc.0.g();
+            let (A_j, a_j) = (acc.0.state(), acc.0.set() );
+            let (B_j, b_j) = (acc.0.state(), acc.0.set() );
+            proofs::ni_poprod_prove(
+                g,
+                g_j,
+                A_j,
+                &((B_j * U_n) % &self.modulus),
+                a_j,
+                b_j,
+                u,
+                &self.modulus,
+            )
+        }).collect();
+
+
         // let pi = m.iter().map(|| {
-        //     // proofs::ni_poprod_prove(x1: &BigUint, x2: &BigUint, z: &BigUint, g: &BigUint, h: &BigUint, y1: &BigUint, y2: &BigUint, n: &BigUint)
+        //     proofs::ni_poprod_prove(self.uacc.g, h: &BigUint, y1: &BigUint, y2: &BigUint, x1: &BigUint, x2: &BigUint, z: &BigUint, n: &BigUint)
         // }).collect()
 
         // TODO: generate pi_prod
@@ -168,20 +236,20 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 }
 
-impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment<'a>
-    for YinYanVectorCommitment<'a, A>
-{
-    fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
-        unimplemented!();
-        // if b == b_prime {
-        //     // Nothing to do
-        // } else if *b {
-        //     self.acc.add(&map_i_to_p_i(i));
-        // } else {
-        //     self.acc.del(&map_i_to_p_i(i)).expect("not a member");
-        // }
-    }
-}
+// impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment<'a>
+//     for YinYanVectorCommitment<'a, A>
+// {
+//     fn update(&mut self, b: &Self::Domain, b_prime: &Self::Domain, i: usize) {
+//         unimplemented!();
+//         // if b == b_prime {
+//         //     // Nothing to do
+//         // } else if *b {
+//         //     self.acc.add(&map_i_to_p_i(i));
+//         // } else {
+//         //     self.acc.del(&map_i_to_p_i(i)).expect("not a member");
+//         // }
+//     }
+// }
 
 fn map_i_to_p_i(i: usize) -> BigUint {
     let mut to_hash = [0u8; 8];

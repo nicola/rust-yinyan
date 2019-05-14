@@ -5,6 +5,8 @@ use rand::Rng;
 
 pub trait FromParts: StaticAccumulator {
     fn from_parts(modulus: BigUint, generator: BigUint) -> Self;
+    fn g(&self) -> &BigUint;
+    fn set(&self) -> &BigUint;
 }
 
 pub trait StaticAccumulator {

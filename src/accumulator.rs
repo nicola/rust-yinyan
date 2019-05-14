@@ -45,6 +45,12 @@ impl FromParts for Accumulator {
             set: BigUint::one(),
         }
     }
+    fn g(&self) -> &BigUint {
+        &self.g
+    }
+    fn set(&self) -> &BigUint {
+        &self.set
+    }
 }
 
 impl StaticAccumulator for Accumulator {
