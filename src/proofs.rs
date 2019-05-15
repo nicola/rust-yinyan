@@ -290,4 +290,43 @@ mod tests {
             assert!(!ni_poprod_verify(&g, &h, &y1, &y2, &pi_fake, &n));
         }
     }
+
+    #[test]
+    fn test_ni_poprod_acc() {
+        let mut rng = thread_rng();
+
+        for i in 1..10 {
+            let n = rng.gen_biguint(1024);
+
+            let g = rng.gen_biguint(1024) % &n;
+            let g_j = rng.gen_biguint(1024) % &n;
+            let a_j = rng.gen_prime(128);
+            let b_j = rng.gen_prime(128);
+            let A_j = g_j.modpow(&a_j, &n);
+            let B_j = g_j.modpow(&b_j, &n);
+            let mut u = &a_j * &b_j;
+            let mut U_n = g.modpow(&u, &n);
+
+            let pi = ni_poprod_prove(&g, &g_j, &A_j, &((&B_j * &U_n) % &n), &a_j, &b_j, &u, &n);
+            assert!(ni_poprod_verify(
+                &g,
+                &g_j,
+                &A_j,
+                &((&B_j * &U_n) % &n),
+                &pi,
+                &n
+            ));
+
+            let mut u = &a_j * &b_j * &rng.gen_prime(128);
+            let mut U_n = g.modpow(&u, &n);
+            assert!(!ni_poprod_verify(
+                &g,
+                &g_j,
+                &A_j,
+                &((&B_j * &U_n) % &n),
+                &pi,
+                &n
+            ));
+        }
+    }
 }

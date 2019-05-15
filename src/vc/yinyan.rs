@@ -3,13 +3,13 @@ use byteorder::{BigEndian, ByteOrder};
 use num_bigint::{BigInt, BigUint, RandBigInt};
 use num_traits::cast::FromPrimitive;
 use num_traits::identities::One;
-use std::marker::PhantomData;
-use rand::{CryptoRng, Rng};
+
 
 use crate::hash::hash_prime;
 use crate::proofs;
 use crate::traits::*;
-
+use rand::{CryptoRng, Rng};
+use std::marker::PhantomData;
 // pub struct AccTradeoff {
 //     g: BigUint,
 //     n: BigUint,
@@ -78,7 +78,26 @@ pub struct Config {
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     YinYanVectorCommitment<'a, A>
 {
-    fn specialize(&mut self, size: usize) -> &BigUint {
+    pub fn reset(&mut self) {
+        self.accs = self
+            .accs
+            .iter()
+            .map(|acc| {
+                (
+                    A::from_parts(self.modulus.clone(), acc.0.g().clone()),
+                    A::from_parts(self.modulus.clone(), acc.1.g().clone()),
+                )
+            })
+            .collect();
+        self.uacc = A::from_parts(self.modulus.clone(), self.uacc.g().clone());
+        self.prod_proofs = vec![];
+    }
+    pub fn re_specialize(&mut self, size: usize) -> &BigUint {
+        self.uacc = A::from_parts(self.modulus.clone(), self.uacc.g().clone());
+        self.specialize(size)
+    }
+
+    pub fn specialize(&mut self, size: usize) -> &BigUint {
         // TODO: if already specialized skip first part
         for i in 0..size {
             // TODO: eventually do batchadd (check how we do it in commit)
@@ -159,8 +178,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             .iter()
             .map(|acc| {
                 let g_j = acc.0.g();
+                debug_assert!(g_j == acc.1.g());
                 let (A_j, a_j) = (acc.0.state(), acc.0.set());
-                let (B_j, b_j) = (acc.0.state(), acc.0.set());
+                let (B_j, b_j) = (acc.1.state(), acc.1.set());
                 proofs::ni_poprod_prove(
                     g,
                     g_j,
@@ -173,11 +193,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                 )
             })
             .collect();
-        // let pi = m.iter().map(|| {
-        //     proofs::ni_poprod_prove(self.uacc.g, h: &BigUint, y1: &BigUint, y2: &BigUint, x1: &BigUint, x2: &BigUint, z: &BigUint, n: &BigUint)
-        // }).collect()
-
-        // TODO: generate pi_prod
 
         Self::Commitment {
             states: self
@@ -210,7 +225,14 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
         let p_i = map_i_to_p_i(i);
 
-        b.iter()
+        // Make sure proof is of the right size
+        if self.prod_proofs.len() != self.k || pi.len() != self.k {
+            return false;
+        }
+
+        // Verify accumulator proof
+        let accs_check = b
+            .iter()
             .zip(self.accs.iter())
             .zip(pi.iter())
             .all(|((bit, acc), w)| {
@@ -219,7 +241,30 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                 } else {
                     acc.0.ver_mem(w, &p_i)
                 }
-            })
+            });
+
+        // Verify product proof
+        let uacc_check = {
+            let g = self.uacc.g();
+            let U_n = self.uacc.state();
+            self.accs
+                .iter()
+                .zip(self.prod_proofs.iter())
+                .all(|(acc, prod)| {
+                    let g_j = acc.0.g();
+                    let (A_j, B_j) = (acc.0.state(), acc.1.state());
+                    proofs::ni_poprod_verify(
+                        g,                              // g
+                        g_j,                            // h
+                        A_j,                            // y1
+                        &((B_j * U_n) % &self.modulus), // y2
+                        prod,                           // pi
+                        &self.modulus,
+                    )
+                })
+        };
+
+        accs_check && uacc_check
     }
 
     fn state(&'a self) -> Self::State {
@@ -267,37 +312,64 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    #[test]
-    fn test_yinyan_vc_basics() {
-        let lambda = 128;
-        let k = 2;
-        let n = 1024;
-        let size = 4;
-
+    fn fake_vector(m: usize, k: usize) -> Vec<Vec<bool>> {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-        let config = Config { lambda, k, n, size };
-        let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
-
-        let mut val: Vec<Vec<bool>> = (0..size)
+        let mut val: Vec<Vec<bool>> = (0..m)
             .map(|_| (0..k).map(|_| rng.gen()).collect())
             .collect();
         // set two bits manually, to make checks easier
         val[2] = vec![true, true];
         val[3] = vec![false, false];
 
+        val
+    }
+
+    #[test]
+    fn test_yinyan_vc_basics() {
+
+        // Set up vector commitment
+        let mut rng = ChaChaRng::from_seed([0u8; 32]);
+        let config = Config {
+            lambda: 128,
+            k: 2,
+            n: 1024,
+            size: 4,
+        };
+        let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
+
+        // Specialize & commit to a vector
+        let val = fake_vector(config.size, config.k);
+        vc.specialize(val.len());
         vc.commit(&val);
 
-        // open a set bit
-        let comm = vc.open(&vec![true, true], 2);
+        // Open a particular index
+        let proof = vc.open(&vec![true, true], 2);
+
+        // Accept a correct opening
         assert!(
-            vc.verify(&vec![true, true], 2, &comm),
+            vc.verify(&vec![true, true], 2, &proof),
             "invalid commitment (bit set)"
         );
 
+        // Reject an incorrect witness
         assert!(
-            !vc.verify(&vec![false, false], 2, &comm),
-            "verification should not pass (bit set)"
+            !vc.verify(&vec![false, false], 2, &proof),
+            "verification should not pass"
         );
+
+        // Reject a correct witness with an incorrect proof
+        assert!(
+            !vc.verify(&vec![false, false], 3, &proof),
+            "verification should not pass"
+        );
+
+        // Reject a proof if we have a different specialization
+        let mut vc_fake = vc.clone();
+        vc_fake.re_specialize(val.len() + 1);
+        assert!(
+            !vc_fake.verify(&vec![true, true], 2, &proof),
+            "union proof should not verify"
+        );
+
     }
 }
