@@ -10,12 +10,33 @@ use crate::proofs;
 use crate::traits::*;
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
-// pub struct AccTradeoff {
+
+// pub struct CachedAcc {
+//     int_size_bits: usize,
 //     g: BigUint,
 //     n: BigUint,
 //     root: BigUint,
+//     elements: Vec<BigUint>
 // }
-// impl StaticAccumulator for AccTradeoff {
+
+// impl FromParts for CachedAcc {
+//     fn from_parts(n: BigUint, g: BigUint) -> Self {
+//         CachedAcc {
+//             int_size_bits: n.bits(),
+//             root: g.clone(),
+//             g,
+//             n,
+//         }
+//     }
+//     fn g(&self) -> &BigUint {
+//         &self.g
+//     }
+//     fn set(&self) -> &BigUint {
+//         &self.set
+//     }
+// }
+
+// impl StaticAccumulator for CachedAcc {
 //     #[inline]
 //     fn setup<T, R>(rng: &mut R, int_size_bits: usize) -> Self
 //     where

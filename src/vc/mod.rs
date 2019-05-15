@@ -1,6 +1,6 @@
-mod binary;
-mod general;
-mod yinyan;
+pub mod binary;
+pub mod general;
+pub mod yinyan;
 
 pub use crate::vc::binary::*;
 pub use crate::vc::general::*;
