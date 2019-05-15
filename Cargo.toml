@@ -42,6 +42,10 @@ rand_chacha = "0.1"
 name = "accumulators_benchmarks"
 harness = false
 
+[[bench]]
+name = "vcs_benchmarks"
+harness = false
+
 
 [features]
 default = ["rsa_group"]
