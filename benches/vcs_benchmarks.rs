@@ -27,7 +27,7 @@ mod vc_benches {
     const N: usize = 1048;
     const L: usize = 128;
 
-    // fn make_vc() -> (binary::BinaryVectorCommitment, yinyan::YinYanVectorCommitment) {
+    // fn make_vc<'a>() -> (binary::BinaryVectorCommitment<'a>, yinyan::YinYanVectorCommitment<'a>) {
     //     let m = 10;
     //     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
@@ -57,12 +57,12 @@ mod vc_benches {
 
         // Run Commit benchmarks
         {
-            let (mut vc_bbf2, mut vc_yy2) = (vc_bbf.clone(), vc_yy.clone());
+            let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
             let (val_bbf2, val_yy2) = (val_bbf.clone(), val_yy.clone());
 
             c
-                .bench_function("bench_bbf_commit", move |b| b.iter(|| vc_bbf2.commit(&val_bbf2)))
-                .bench_function("bench_yinyan_commit", move |b| b.iter(|| vc_yy2.commit(&val_yy2)));
+                .bench_function("bench_bbf_commit", move |b| b.iter(|| bbf.commit(&val_bbf2)))
+                .bench_function("bench_yinyan_commit", move |b| b.iter(|| yy.commit(&val_yy2)));
         }
 
         vc_bbf.commit(&val_bbf);
@@ -70,10 +70,23 @@ mod vc_benches {
 
         // Run Open benchmarks
         {
+            let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
             c
-                .bench_function("bench_bbf_open", move |b| b.iter(|| vc_bbf.open(&true, 3) ))
-                .bench_function("bench_yinyan_open", move |b| b.iter(|| vc_yy.open(&vec![true], 3) ));
+                .bench_function("bench_bbf_open", move |b| b.iter(|| bbf.open(&true, 3) ))
+                .bench_function("bench_yinyan_open", move |b| b.iter(|| yy.open(&vec![true], 3) ));
         }
+
+        let pi_bbf = vc_bbf.open(&true, 3);
+        let pi_yy = vc_yy.open(&vec![true], 3);
+
+        // Verify
+        {
+            let (bbf, yy) = (vc_bbf.clone(), vc_yy.clone());
+            c
+                .bench_function("bench_bbf_verify", move |b| b.iter(|| bbf.verify(&true, 3, &pi_bbf) ))
+                .bench_function("bench_bbf_verify", move |b| b.iter(|| yy.verify(&vec![true], 3, &pi_yy) ));
+        }
+
     }
 
     criterion_group! {
