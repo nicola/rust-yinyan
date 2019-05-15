@@ -371,5 +371,12 @@ mod tests {
             "union proof should not verify"
         );
 
+        // Accept is re-specialized correctly
+        vc_fake.re_specialize(val.len());
+        assert!(
+            vc_fake.verify(&vec![true, true], 2, &proof),
+            "union proof should not verify"
+        );
+
     }
 }
