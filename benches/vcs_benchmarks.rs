@@ -27,32 +27,31 @@ mod vc_benches {
     const N: usize = 1048;
     const L: usize = 128;
 
-    // fn make_vc<'a>() -> (binary::BinaryVectorCommitment<'a>, yinyan::YinYanVectorCommitment<'a>) {
-    //     let m = 10;
-    //     let mut rng = ChaChaRng::from_seed([0u8; 32]);
+    fn make_vc<'a, A>(m: usize) -> (binary::BinaryVectorCommitment<'a, A>, yinyan::YinYanVectorCommitment<'a, A>)
+    where A: accumulators::BatchedAccumulator + accumulators::UniversalAccumulator + accumulators::FromParts {
+        let m = 10;
+        let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-    //     let config_bbf = binary::Config { lambda: L, n: N };
-    //     let mut vc_bbf = binary::BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
+        let config_bbf = binary::Config { lambda: L, n: N };
+        let mut vc_bbf = binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
-    //     let config_yy = yinyan::Config { lambda: L, k: 1, n: N, size: m };
-    //     let mut vc_yy = yinyan::YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config_yy);
+        let config_yy = yinyan::Config { lambda: L, k: 1, n: N, size: m };
+        let mut vc_yy = yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
-    //    vc_yy, vc_bbf
-    // }
+        (vc_bbf, vc_yy)
+    }
 
     fn bench_bbf_commit(c: &mut Criterion) {
         let m = 10;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
+        let (mut vc_bbf, mut vc_yy) = make_vc::<'_, Accumulator>(m);
+
         // setting up BBF
-        let config_bbf = binary::Config { lambda: L, n: N };
-        let mut vc_bbf = binary::BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
         let mut val_bbf: Vec<bool> = (0..m).map(|_| rng.gen()).collect();
         val_bbf[3] = true;
 
         // setting up YY
-        let config_yy = yinyan::Config { lambda: L, k: 1, n: N, size: m };
-        let mut vc_yy = yinyan::YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config_yy);
         let val_yy : Vec<Vec<bool>> = val_bbf.iter().map(|v| vec![*v]).collect();
 
         // Run Commit benchmarks
@@ -84,14 +83,14 @@ mod vc_benches {
             let (bbf, yy) = (vc_bbf.clone(), vc_yy.clone());
             c
                 .bench_function("bench_bbf_verify", move |b| b.iter(|| bbf.verify(&true, 3, &pi_bbf) ))
-                .bench_function("bench_bbf_verify", move |b| b.iter(|| yy.verify(&vec![true], 3, &pi_yy) ));
+                .bench_function("bench_yy_verify", move |b| b.iter(|| yy.verify(&vec![true], 3, &pi_yy) ));
         }
 
     }
 
     criterion_group! {
         name = vc_benches;
-        config = Criterion::default().sample_size(3);
+        config = Criterion::default().sample_size(5);
         targets =
             bench_bbf_commit,
     }
