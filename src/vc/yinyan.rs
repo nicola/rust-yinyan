@@ -107,7 +107,7 @@ pub struct Config {
     pub lambda: usize,
     pub k: usize,
     pub n: usize,
-    //pub size: usize,
+    pub size: usize,
     pub precomp_l: usize
 }
 
@@ -166,7 +166,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         YinYanVectorCommitment {
             lambda: config.lambda,
             k: config.k,
-            size: config.n,
+            size: config.size,
             modulus: modulus.clone(),
             prod_proofs: vec![],
             uacc: A::from_parts(modulus.clone(), rng.gen_biguint(config.n)),
@@ -182,14 +182,14 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                 .collect(),
             _a: PhantomData,
             precomp_l: config.precomp_l,
-            precomp_N: config.n/config.precomp_l,
-            pi_precomputed: Vec::with_capacity( config.n/config.precomp_l)
+            precomp_N: config.size/config.precomp_l,
+            pi_precomputed: Vec::with_capacity( config.size/config.precomp_l)
         }
     }
 
-    fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment {
+    fn commit(&mut self, words: &[Self::Domain]) -> Self::Commitment {
         // i = 0..m (m number of words)
-        for (i, v) in m.iter().enumerate() {
+        for (i, v) in words.iter().enumerate() {
             debug_assert!(v.len() == self.k);
 
             // p_i
@@ -374,13 +374,13 @@ mod tests {
             lambda: 128,
             k: 2,
             n: 1024,
-            precomp_l: 1
-            //size: 4,
+            precomp_l: 1,
+            size: 4,
         };
         let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         // Specialize & commit to a vector
-        let val = fake_vector(config.n, config.k);
+        let val = fake_vector(config.size, config.k);
         vc.specialize(val.len());
         vc.commit(&val);
 

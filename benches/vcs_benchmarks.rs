@@ -24,9 +24,10 @@ mod vc_benches {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    const N:usize = 1048;
+    const N:usize = 1048; // modulus size
     const L:usize = 128; // Not sure we are using it.
     const K:usize = 1;
+    const SZ:usize = 1000;
 
     const N_ITERS:usize = 10;
 
@@ -41,7 +42,7 @@ mod vc_benches {
         let config_bbf = binary::Config { lambda: L, n: N };
         let mut vc_bbf = binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
-        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: 1 };
+        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: 1, size: SZ };
         let mut vc_yy = yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
         (vc_bbf, vc_yy)
@@ -59,7 +60,7 @@ mod vc_benches {
         const FIXED_V:bool = false;
 
         // setting up BBF
-        let mut val_bbf: Vec<bool> = (0..N).map(|_| rng.gen()).collect();
+        let mut val_bbf: Vec<bool> = (0..SZ).map(|_| rng.gen()).collect();
         val_bbf[FIXED_IDX] = FIXED_V;
 
         // setting up YY (Same values as val_bbf but in different format)
