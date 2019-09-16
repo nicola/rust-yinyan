@@ -68,22 +68,47 @@ use std::marker::PhantomData;
 // }
 
 type Proof = Vec<BigUint>;
+type BatchProof = Vec<BigUint>;
+type Domain = Vec<bool>;
+
 
 pub struct Commitment {
     pub states: Vec<(BigUint, BigUint)>,
     pub prods: Vec<proofs::PoprodProof>,
 }
 
-fn partitioned_prime_prod() -> (BigUint, BigUint) {
-    unimplemented!();
+fn partitioned_prime_prod(vs:Vec<bool>) -> (BigUint, BigUint) {
+    let mut rslt:Vec<BigUint> = vec![BigUint::one(), BigUint::one()];
+
+    for (i,b) in vs.iter().enumerate() {
+        let b_idx = if *b {1} else {0};
+        rslt[b_idx] = rslt[b_idx].clone() * map_i_to_p_i(i);
+    }
+
+    (rslt[0].clone(), rslt[1].clone())
 }
 
-/*
-fn open_precompute<'a, A>(c:YinYanVectorCommitment<'a, A>) ->
+
+fn precompute<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
+    (mut c:YinYanVectorCommitment<'a, A>, vals:&[Domain])
 {
-    unimplemented!();
+    let l:usize = c.precomp_l;
+
+    for j in 1..(l+1) {
+        // set
+        let I_j:Vec<usize> = ((j-1)*l..j*l).collect(); // I_j = { (j-1)*l ... j*l-1}
+        c.pi_precomp[j-1] = c.batch_open(vals, I_j.as_slice());
+     }
 }
-*/
+
+fn open_from_precomp<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
+    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> Proof
+{
+    // NB: i is an index between 0 and precomp_N-1
+    assert!(i < c.precomp_N);
+    c.pi_precomp[i].clone()
+}
+
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -99,7 +124,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     modulus: BigUint,
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N precomputed proofs
-    pi_precomputed: Vec<Proof>
+    pi_precomp: Vec<BatchProof>
 }
 
 #[derive(Clone, Debug)]
@@ -147,7 +172,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment<'a>
     for YinYanVectorCommitment<'a, A>
 {
-    type Domain = Vec<bool>; // make sure this is of size k
+    type Domain = Domain; // make sure this is of size k
     type Proof = Proof;
     type BatchProof = Vec<BigUint>;
     type Config = Config;
@@ -183,7 +208,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             _a: PhantomData,
             precomp_l: config.precomp_l,
             precomp_N: config.size/config.precomp_l,
-            pi_precomputed: Vec::with_capacity( config.size/config.precomp_l)
+            pi_precomp: Vec::with_capacity( config.size/config.precomp_l)
         }
     }
 
@@ -377,6 +402,13 @@ mod tests {
             precomp_l: 1,
             size: 4,
         };
+
+        // accept if we can do prime partition correctly
+        let avec:Vec<bool> = vec![true, true, false, false];
+        let (a, b) = partitioned_prime_prod(avec);
+        assert_eq!(a, map_i_to_p_i(2)*map_i_to_p_i(3));
+        assert_eq!(b, map_i_to_p_i(0)*map_i_to_p_i(1));
+
         let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         // Specialize & commit to a vector
@@ -386,6 +418,7 @@ mod tests {
 
         // Open a particular index
         let proof = vc.open(&vec![true, true], 2);
+
 
         // Accept a correct opening
         assert!(
