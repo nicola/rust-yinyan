@@ -135,7 +135,7 @@ impl UniversalAccumulator for Accumulator {
         let s_star = &self.set;
 
         // a, b <- Bezout(x, set*)
-        let (_, a, b) = x.extended_gcd(s_star);
+        let (_, a, b) = ExtendedGcd::extended_gcd(x, s_star);
         let d = modpow_uint_int(&self.g, &a, &self.n).expect("prime");
 
         (d, b)
@@ -307,7 +307,7 @@ impl BatchedAccumulator for Accumulator {
         let n = &self.n;
 
         // a, b <- Bezout(x, s_star)
-        let (_, a, b) = x.extended_gcd(&self.set);
+        let (_, a, b) = ExtendedGcd::extended_gcd(x, &self.set);
 
         // d <- g^a
         let d = modpow_uint_int(g, &a, n).expect("invalid state");
@@ -479,7 +479,7 @@ mod tests {
         // A = g ^ set*
         let root = g.modpow(&s_star, &n);
 
-        let (_, a, b) = (&x).extended_gcd(&s_star);
+        let (_, a, b) = ExtendedGcd::extended_gcd(&x, &s_star);
         println!("{} {} {} {}", &g, &a, &b, &n);
 
         let u = BigInt::from_biguint(Sign::Plus, x.clone());

@@ -74,6 +74,17 @@ pub struct Commitment {
     pub prods: Vec<proofs::PoprodProof>,
 }
 
+fn partitioned_prime_prod() -> (BigUint, BigUint) {
+    unimplemented!();
+}
+
+/*
+fn open_precompute<'a, A>(c:YinYanVectorCommitment<'a, A>) ->
+{
+    unimplemented!();
+}
+*/
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
@@ -86,6 +97,9 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     _a: PhantomData<&'a A>,
     prod_proofs: Vec<proofs::PoprodProof>,
     modulus: BigUint,
+    precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
+    precomp_N: usize, // There are precomp_N precomputed proofs
+    pi_precomputed: Vec<Proof>
 }
 
 #[derive(Clone, Debug)]
@@ -93,7 +107,8 @@ pub struct Config {
     pub lambda: usize,
     pub k: usize,
     pub n: usize,
-    pub size: usize,
+    //pub size: usize,
+    pub precomp_l: usize
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
@@ -151,7 +166,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         YinYanVectorCommitment {
             lambda: config.lambda,
             k: config.k,
-            size: config.size,
+            size: config.n,
             modulus: modulus.clone(),
             prod_proofs: vec![],
             uacc: A::from_parts(modulus.clone(), rng.gen_biguint(config.n)),
@@ -166,6 +181,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                 })
                 .collect(),
             _a: PhantomData,
+            precomp_l: config.precomp_l,
+            precomp_N: config.n/config.precomp_l,
+            pi_precomputed: Vec::with_capacity( config.n/config.precomp_l)
         }
     }
 
@@ -302,6 +320,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchProof) -> bool {
         unimplemented!();
     }
+
+
 }
 
 // impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment<'a>
@@ -354,12 +374,13 @@ mod tests {
             lambda: 128,
             k: 2,
             n: 1024,
-            size: 4,
+            precomp_l: 1
+            //size: 4,
         };
         let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         // Specialize & commit to a vector
-        let val = fake_vector(config.size, config.k);
+        let val = fake_vector(config.n, config.k);
         vc.specialize(val.len());
         vc.commit(&val);
 
