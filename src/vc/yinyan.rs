@@ -8,6 +8,7 @@ use num_traits::identities::One;
 use crate::hash::hash_prime;
 use crate::proofs;
 use crate::traits::*;
+use crate::math::shamir_trick;
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
 
@@ -67,8 +68,11 @@ use std::marker::PhantomData;
 //     }
 // }
 
-type Proof = Vec<BigUint>;
-type BatchProof = Vec<BigUint>;
+
+type ProofBit = BigUint;
+type Proof = Vec<ProofBit>; // proof for word
+type BatchProofBit = (ProofBit, ProofBit); // Batch proof for one bit
+type BatchProof = Vec<BatchProofBit>; // batch proof for one word (for any k)
 type Domain = Vec<bool>;
 
 
@@ -102,13 +106,30 @@ fn precompute<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 }
 
 fn open_from_precomp<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
-    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> Proof
+    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> BatchProof
 {
     // NB: i is an index between 0 and precomp_N-1
     assert!(i < c.precomp_N);
+
     c.pi_precomp[i].clone()
 }
 
+
+// This version is not for generic words but only for case k = 1 for now
+fn aggregate_proofs_single(
+    pf1:BatchProofBit, vals1:Vec<bool>, I1:&[usize],
+    pf2:BatchProofBit, vals2:Vec<bool>, I2:&[usize],
+    n:BigUint
+) -> BatchProofBit {
+        // XXX: We assume for now I1 and I2 are disjoint
+        let (a1, b1) = partitioned_prime_prod(vals1);
+        let (a2, b2) = partitioned_prime_prod(vals2);
+
+        let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &n).unwrap();
+        let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &n).unwrap();
+
+        (pf_zero.clone(), pf_one.clone())
+}
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -174,7 +195,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
 {
     type Domain = Domain; // make sure this is of size k
     type Proof = Proof;
-    type BatchProof = Vec<BigUint>;
+    type BatchProof = BatchProof;
     type Config = Config;
     type State = Vec<(&'a BigUint, &'a BigUint)>;
     type Commitment = Commitment;
@@ -409,12 +430,24 @@ mod tests {
         assert_eq!(a, map_i_to_p_i(2)*map_i_to_p_i(3));
         assert_eq!(b, map_i_to_p_i(0)*map_i_to_p_i(1));
 
+
+
+
         let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
+
+
 
         // Specialize & commit to a vector
         let val = fake_vector(config.size, config.k);
         vc.specialize(val.len());
         vc.commit(&val);
+
+
+        // Testing whether the aggregation works
+        // Get two proofs and just merge BatchedAccumulator
+        let proof = vc.open(&vec![true, true], 2);
+
+
 
         // Open a particular index
         let proof = vc.open(&vec![true, true], 2);
