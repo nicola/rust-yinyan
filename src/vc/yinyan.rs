@@ -84,12 +84,12 @@ pub struct Commitment {
 
 
 // produces two accumulators---one for the 0-vals; the other for the one-vals
-fn partitioned_prime_prod(vs:Vec<bool>) -> (BigUint, BigUint) {
+fn partitioned_prime_prod(vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
     let mut rslt:Vec<BigUint> = vec![BigUint::one(), BigUint::one()];
 
-    for (i,b) in vs.iter().enumerate() {
+    for (b, i) in vs.iter().zip(I) {
         let b_idx = if *b {1} else {0};
-        rslt[b_idx] = rslt[b_idx].clone() * map_i_to_p_i(i);
+        rslt[b_idx] = rslt[b_idx].clone() * map_i_to_p_i(*i); // XXX: i is not the right idx
     }
 
     (rslt[0].clone(), rslt[1].clone())
@@ -195,12 +195,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     }
 
     // this is used for "trivial" proofs
-    fn bit_verify(&self, acc:&(A, A), bit:&bool, pf: &ProofBit, prime:&BigUint) -> bool {
+    fn bit_verify(&self, acc:&(A, A), bit:&bool, pf: &ProofBit, expn:&BigUint) -> bool {
         let (pf0, pf1) = pf;
         if *bit {
-            acc.1.ver_mem(pf1, prime)
+            acc.1.ver_mem(pf1, expn)
         } else {
-            acc.0.ver_mem(pf0, prime)
+            acc.0.ver_mem(pf0, expn)
         }
     }
 
@@ -251,20 +251,46 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     // This version is not for generic words but only for case k = 1 for now
     fn aggregate_proofs_bit(
         &self,
-        pf1:BatchProofBit, vals1:Vec<bool>, I1:&[usize],
-        pf2:BatchProofBit, vals2:Vec<bool>, I2:&[usize],
-        n:BigUint
+        pf1:&BatchProofBit, vals1:&Vec<bool>, I1:&[usize],
+        pf2:&BatchProofBit, vals2:&Vec<bool>, I2:&[usize]
     ) -> BatchProofBit {
             // XXX: We assume for now I1 and I2 are disjoint
-            let (a1, b1) = partitioned_prime_prod(vals1);
-            let (a2, b2) = partitioned_prime_prod(vals2);
+            let (a1, b1) = partitioned_prime_prod(vals1, I1);
+            let (a2, b2) = partitioned_prime_prod(vals2, I2);
 
-            let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &n).unwrap();
-            let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &n).unwrap();
+            let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &self.modulus).unwrap();
+            let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &self.modulus).unwrap();
 
             (pf_zero.clone(), pf_one.clone())
     }
 
+    fn aggregate_proofs(
+        &self,
+        pf1:&BatchProof, vals1:&[Domain], I1:&[usize],
+        pf2:&BatchProof, vals2:&[Domain], I2:&[usize]
+    ) -> BatchProof {
+            let mut pfs:BatchProof = vec![];
+            for i in 0..self.k {
+                let vals1_i = vals1.iter().map(|v| v[i]).collect();
+                let vals2_i = vals2.iter().map(|v| v[i]).collect();
+                let pf_i = self.aggregate_proofs_bit(
+                    &pf1[i], &vals1_i, I1, &pf2[i], &vals2_i, I2);
+
+                pfs.push(pf_i);
+            }
+            pfs
+    }
+
+
+    fn batch_verify_bits(&self,
+        pos_in_word:usize, bits: &Vec<bool>, I: &[usize],
+        pi: &BatchProofBit) -> bool {
+        let (p0, p1) = partitioned_prime_prod(bits, I);
+        let (pf0, pf1) = pi;
+        let acc = &self.accs[pos_in_word];
+        let rslt = acc.1.ver_mem(pf1, &p1) && acc.0.ver_mem(pf0, &p0);
+        rslt
+    }
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment<'a>
@@ -433,12 +459,16 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             .collect()
     }
 
-    fn batch_open(&self, b: &[Self::Domain], i: &[usize]) -> Self::BatchProof {
+    fn batch_open(&self, ws: &[Self::Domain], I: &[usize]) -> Self::BatchProof {
         unimplemented!();
     }
 
-    fn batch_verify(&self, b: &[Self::Domain], i: &[usize], pi: &Self::BatchProof) -> bool {
-        unimplemented!();
+    fn batch_verify(&self, ws: &[Self::Domain], I: &[usize], pi: &Self::BatchProof) -> bool {
+        for i in 0..self.k {
+            let bs_i = ws.iter().map(|v| v[i]).collect();
+            if !self.batch_verify_bits(i, &bs_i, I, &pi[i]) { return false; }
+        }
+        true
     }
 
 
@@ -513,12 +543,9 @@ mod tests {
 
         // accept if we can do prime partition correctly
         let avec:Vec<bool> = vec![true, true, false, false];
-        let (a, b) = partitioned_prime_prod(avec);
+        let (a, b) = partitioned_prime_prod(&avec, &[0,1, 2, 3]);
         assert_eq!(a, map_i_to_p_i(2)*map_i_to_p_i(3));
         assert_eq!(b, map_i_to_p_i(0)*map_i_to_p_i(1));
-
-
-
 
         let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
@@ -595,6 +622,27 @@ mod tests {
             YinYanVectorCommitment::<Accumulator>::
                 setup::<RSAGroup, _>(&mut rng, &config);
         vc.commit(&liftv(&avec));
+
+        let opn = |i| {let val:bool = avec[i]; vc.open(&liftb(&val), i)};
+        // test aggregate
+        let pf0 = opn(0);
+        let pf1 = opn(1);
+
+        // should accept partition
+        let pf_agg =
+            vc.aggregate_proofs(
+                &pf0, &[vec![avec[0]]], &[0],
+                &pf1, &[vec![avec[1]]], &[1] );
+        let agg_vals = &[liftb(&avec[0]), liftb(&avec[1])];
+        assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
+
+        // should not accept partition
+        let pf_agg =
+            vc.aggregate_proofs(
+                &pf0, &[vec![avec[0]]], &[0],
+                &pf1, &[vec![avec[1]]], &[1] );
+        let agg_vals = &[liftb(&avec[0]), liftb(&avec[1])];
+        assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
     }
 
 }
