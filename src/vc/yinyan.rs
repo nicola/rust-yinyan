@@ -109,18 +109,6 @@ fn precompute_helper(b:bool, l:usize,  g:&BigUint, modulus:&BigUint, ps:&Vec<Big
 }
 
 
-
-fn open_from_precomp<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
-    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> Proof
-{
-    // NB: i is an index between 0 and precomp_N-1
-    assert!(i < c.precomp_N);
-    assert_eq!(c.k, 1); // Temporarily supporting only simple bit domains.
-
-    c.pi_precomp[i].clone()
-}
-
-
 // This version is not for generic words but only for case k = 1 for now
 /*
 fn aggregate_proofs_single(
@@ -236,8 +224,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         assert_eq!(vals_.len(), self.size);
         assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
 
-        // we convert to simple bit vals
-        let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
+        // let's start from square zero
+        self.pi_precomp.clear();
+
+        let mut vals:Vec<bool> = vec![];
+
+        for v in vals_.iter() {
+            //println!("Size of each word is {} and value is {}", v.len(), v[0]);
+            // we convert to simple bit vals
+            vals.push(v[0]);
+        }
+
+        //let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
+
 
         let l:usize = self.precomp_l;
         let ps = all_primes(self.size); // all primes
@@ -246,25 +245,31 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         let pfs0 = precompute_helper(false, l,  g, &self.modulus, &ps, &vals);
         let pfs1 = precompute_helper(true, l,  g, &self.modulus, &ps, &vals);
 
-        assert_eq!(pfs1.len(), self.precomp_N);
 
+        assert_eq!(pfs1.len(), self.precomp_N);
 
         for i in 0..self.precomp_N {
             // we have a vector of one element here as current impl is for k=1 only
-            self.pi_precomp[i] = vec![(pfs0[i].clone(), pfs1[i].clone())];
+            let aProof = vec![(pfs0[i].clone(), pfs1[i].clone())];
+            self.pi_precomp.push( aProof );
         }
-
-
-
-        /*
-        for j in 1..(l+1) {
-            // set
-            let I_j:Vec<usize> = ((j-1)*l..j*l).collect(); // I_j = { (j-1)*l ... j*l-1}
-            c.pi_precomp[j-1] = c.batch_open(vals, I_j.as_slice());
-         }
-         */ // old code
     }
 
+    pub fn commit_and_precompute(&mut self, vals:&[Domain]) -> Commitment {
+        let c = self.commit(vals);
+        println!("\n##got here##");
+        self.precompute(vals);
+        c
+    }
+
+    pub fn open_from_precomp(&self, i:usize) -> Proof
+    {
+        // NB: i is an index between 0 and precomp_N-1. It's the index of a chunk!
+        assert!(i < self.precomp_N);
+        assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
+
+        self.pi_precomp[i].clone()
+    }
 
 }
 

@@ -27,9 +27,9 @@ mod vc_benches {
     const N:usize = 1048; // modulus size
     const L:usize = 128; // Not sure we are using it.
     const K:usize = 1;
-    const SZ:usize = 1000;
+    const SZ:usize = 256;
 
-    const N_ITERS:usize = 10;
+    const N_ITERS:usize = 5;
 
     const SEED:[u8;32] = [1u8;32];
 
@@ -73,19 +73,18 @@ mod vc_benches {
 
             c
                 .bench_function("bench_bbf_commit", move |b| b.iter(|| bbf.commit(&val_bbf2)))
-                .bench_function("bench_yinyan_commit", move |b| b.iter(|| yy.commit(&val_yy2)));
+                .bench_function("bench_yinyan_commit_with_precomputation", move |b| b.iter(|| yy.commit_and_precompute(&val_yy2)));
         }
 
         vc_bbf.commit(&val_bbf);
-        vc_yy.commit(&val_yy);
+        vc_yy.commit_and_precompute(&val_yy);
 
         // Run Open benchmarks
         {
-            // XXX: Should be opening something random
             let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
             c
-                .bench_function("bench_bbf_open", move |b| b.iter(|| bbf.open(&FIXED_V, FIXED_IDX) ))
-                .bench_function("bench_yinyan_open", move |b| b.iter(|| yy.open(&vec![FIXED_V], FIXED_IDX) ));
+                .bench_function("bench_bbf_open", move |b| b.iter(|| bbf.open(&FIXED_V, FIXED_IDX) )) // XXX: Should become a batch open whenever we have l>=1
+                .bench_function("bench_yinyan_open_precomp", move |b| b.iter(|| yy.open_from_precomp(FIXED_IDX) ));
         }
 
         let pi_bbf = vc_bbf.open(&FIXED_V, FIXED_IDX);
