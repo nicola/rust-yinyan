@@ -8,7 +8,7 @@ use num_traits::identities::One;
 use crate::hash::hash_prime;
 use crate::proofs;
 use crate::traits::*;
-use crate::math::shamir_trick;
+use crate::math::{shamir_trick, root_factor_general};
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
 
@@ -69,10 +69,9 @@ use std::marker::PhantomData;
 // }
 
 
-type ProofBit = BigUint;
+type ProofBit = (BigUint, BigUint);
 type Proof = Vec<ProofBit>; // proof for word
-type BatchProofBit = (ProofBit, ProofBit); // Batch proof for one bit
-type BatchProof = Vec<BatchProofBit>; // batch proof for one word (for any k)
+type BatchProof = Proof;
 type Domain = Vec<bool>;
 
 
@@ -81,6 +80,9 @@ pub struct Commitment {
     pub prods: Vec<proofs::PoprodProof>,
 }
 
+
+
+// produces two accumulators---one for the 0-vals; the other for the one-vals
 fn partitioned_prime_prod(vs:Vec<bool>) -> (BigUint, BigUint) {
     let mut rslt:Vec<BigUint> = vec![BigUint::one(), BigUint::one()];
 
@@ -92,30 +94,35 @@ fn partitioned_prime_prod(vs:Vec<bool>) -> (BigUint, BigUint) {
     (rslt[0].clone(), rslt[1].clone())
 }
 
-
-fn precompute<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
-    (mut c:YinYanVectorCommitment<'a, A>, vals:&[Domain])
-{
-    let l:usize = c.precomp_l;
-
-    for j in 1..(l+1) {
-        // set
-        let I_j:Vec<usize> = ((j-1)*l..j*l).collect(); // I_j = { (j-1)*l ... j*l-1}
-        c.pi_precomp[j-1] = c.batch_open(vals, I_j.as_slice());
-     }
+fn all_primes(n:usize) -> Vec<BigUint> {
+    (0..n).map( |i| map_i_to_p_i(i) ).collect()
 }
 
+fn precompute_helper(b:bool, l:usize,  g:&BigUint, modulus:&BigUint, ps:&Vec<BigUint>, vals:&Vec<bool>) -> Vec<BigUint>
+{
+    let f = |idx:usize| if vals[idx]==b {ps[idx].clone()} else {BigUint::one()};
+
+    // ps_b is the same as ps but "neutralizes" positions w/ 1-b as value
+    let ps_b:Vec<BigUint> = (0..ps.len()).map(f).collect();
+    let pfs_b = root_factor_general(g, ps_b.as_slice(), l, &modulus );
+    pfs_b
+}
+
+
+
 fn open_from_precomp<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
-    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> BatchProof
+    (c:YinYanVectorCommitment<'a, A>, vals: &[Domain], i:usize) -> Proof
 {
     // NB: i is an index between 0 and precomp_N-1
     assert!(i < c.precomp_N);
+    assert_eq!(c.k, 1); // Temporarily supporting only simple bit domains.
 
     c.pi_precomp[i].clone()
 }
 
 
 // This version is not for generic words but only for case k = 1 for now
+/*
 fn aggregate_proofs_single(
     pf1:BatchProofBit, vals1:Vec<bool>, I1:&[usize],
     pf2:BatchProofBit, vals2:Vec<bool>, I2:&[usize],
@@ -130,6 +137,7 @@ fn aggregate_proofs_single(
 
         (pf_zero.clone(), pf_one.clone())
 }
+*/
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -145,7 +153,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     modulus: BigUint,
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N precomputed proofs
-    pi_precomp: Vec<BatchProof>
+    pi_precomp: Vec<Proof>
 }
 
 #[derive(Clone, Debug)]
@@ -188,6 +196,76 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
         self.uacc.state()
     }
+
+    fn get_acc_for(&self, b:bool, pos_in_word:usize) -> BigUint
+    {
+        if b {
+            self.accs[pos_in_word].1.state().clone()
+        } else {
+            self.accs[pos_in_word].0.state().clone()
+        }
+    }
+
+    // Makes a trivial proof for a bit b from an accumulators by
+    //  simply wrapping it into a pair appropriately
+    fn mk_triv_pf(&self, b:bool, pos_in_word:usize, pf_for_b: BigUint) -> ProofBit
+    {
+        // get current accumulator for not(b)
+        let acc = self.get_acc_for(!b, pos_in_word);
+
+        if b { // this is a proof for 1
+            (acc, pf_for_b)
+        } else {
+            (pf_for_b, acc)
+        }
+    }
+
+    // this is used for "trivial" proofs
+    fn bit_verify(&self, acc:&(A, A), bit:&bool, pf: &ProofBit, prime:&BigUint) -> bool {
+        let (pf0, pf1) = pf;
+        if *bit {
+            acc.1.ver_mem(pf1, prime)
+        } else {
+            acc.0.ver_mem(pf0, prime)
+        }
+    }
+
+    pub fn precompute(&mut self, vals_:&[Domain])
+    {
+        // for now we force this
+        assert_eq!(vals_.len(), self.size);
+        assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
+
+        // we convert to simple bit vals
+        let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
+
+        let l:usize = self.precomp_l;
+        let ps = all_primes(self.size); // all primes
+        let g = self.uacc.g();
+
+        let pfs0 = precompute_helper(false, l,  g, &self.modulus, &ps, &vals);
+        let pfs1 = precompute_helper(true, l,  g, &self.modulus, &ps, &vals);
+
+        assert_eq!(pfs1.len(), self.precomp_N);
+
+
+        for i in 0..self.precomp_N {
+            // we have a vector of one element here as current impl is for k=1 only
+            self.pi_precomp[i] = vec![(pfs0[i].clone(), pfs1[i].clone())];
+        }
+
+
+
+        /*
+        for j in 1..(l+1) {
+            // set
+            let I_j:Vec<usize> = ((j-1)*l..j*l).collect(); // I_j = { (j-1)*l ... j*l-1}
+            c.pi_precomp[j-1] = c.batch_open(vals, I_j.as_slice());
+         }
+         */ // old code
+    }
+
+
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment<'a>
@@ -289,19 +367,20 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         }
     }
 
-    fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
+    fn open(&self, wd: &Self::Domain, i: usize) -> Self::Proof {
         let p_i = map_i_to_p_i(i);
 
-        let proof: Proof = b
-            .iter()
+        let proof: Proof = wd
+            .iter().enumerate()
             .zip(self.accs.iter())
-            .map(|(bit, acc)| {
-                if *bit {
-                    acc.1.mem_wit_create(&p_i)
-                } else {
-                    acc.0.mem_wit_create(&p_i)
-                }
-            })
+            .map( |((idx, bit), acc)| {
+                let pf_bit = if *bit {
+                        acc.1.mem_wit_create(&p_i)
+                    } else {
+                        acc.0.mem_wit_create(&p_i)
+                    };
+                self.mk_triv_pf(*bit, idx, pf_bit)
+            } )
             .collect();
 
         proof
@@ -321,11 +400,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             .zip(self.accs.iter())
             .zip(pi.iter())
             .all(|((bit, acc), w)| {
-                if *bit {
+                self.bit_verify(acc, bit, w, &p_i)
+                /*if *bit {
                     acc.1.ver_mem(w, &p_i)
                 } else {
                     acc.0.ver_mem(w, &p_i)
-                }
+                }*/
             });
 
         // Verify product proof

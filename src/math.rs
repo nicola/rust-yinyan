@@ -80,6 +80,7 @@ pub fn shamir_trick(
 
 /// Given g and x1,...,xN, let y = `x = \prod x_i` and l, root_factor calculates the
 /// `X_i`-th roots, for all `i` \in [N/l], w/ X_i :=  x_{(i-1)l+1} * ... * x_{il}
+// Both N and l should be powers of 2.
 /// All operations are `mod n`.
 pub fn root_factor_general(g: &BigUint, x: &[BigUint], l:usize, n: &BigUint) -> Vec<BigUint> {
     // l represents max size
