@@ -71,6 +71,7 @@ use std::marker::PhantomData;
 
 type ProofBit = (BigUint, BigUint);
 type Proof = Vec<ProofBit>; // proof for word
+type BatchProofBit = ProofBit;
 type BatchProof = Proof;
 type Domain = Vec<bool>;
 
@@ -109,23 +110,8 @@ fn precompute_helper(b:bool, l:usize,  g:&BigUint, modulus:&BigUint, ps:&Vec<Big
 }
 
 
-// This version is not for generic words but only for case k = 1 for now
-/*
-fn aggregate_proofs_single(
-    pf1:BatchProofBit, vals1:Vec<bool>, I1:&[usize],
-    pf2:BatchProofBit, vals2:Vec<bool>, I2:&[usize],
-    n:BigUint
-) -> BatchProofBit {
-        // XXX: We assume for now I1 and I2 are disjoint
-        let (a1, b1) = partitioned_prime_prod(vals1);
-        let (a2, b2) = partitioned_prime_prod(vals2);
 
-        let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &n).unwrap();
-        let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &n).unwrap();
 
-        (pf_zero.clone(), pf_one.clone())
-}
-*/
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -227,16 +213,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         // let's start from square zero
         self.pi_precomp.clear();
 
-        let mut vals:Vec<bool> = vec![];
-
-        for v in vals_.iter() {
-            //println!("Size of each word is {} and value is {}", v.len(), v[0]);
-            // we convert to simple bit vals
-            vals.push(v[0]);
-        }
-
-        //let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
-
+        let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
 
         let l:usize = self.precomp_l;
         let ps = all_primes(self.size); // all primes
@@ -269,6 +246,23 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
 
         self.pi_precomp[i].clone()
+    }
+
+    // This version is not for generic words but only for case k = 1 for now
+    fn aggregate_proofs_bit(
+        &self,
+        pf1:BatchProofBit, vals1:Vec<bool>, I1:&[usize],
+        pf2:BatchProofBit, vals2:Vec<bool>, I2:&[usize],
+        n:BigUint
+    ) -> BatchProofBit {
+            // XXX: We assume for now I1 and I2 are disjoint
+            let (a1, b1) = partitioned_prime_prod(vals1);
+            let (a2, b2) = partitioned_prime_prod(vals2);
+
+            let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &n).unwrap();
+            let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &n).unwrap();
+
+            (pf_zero.clone(), pf_one.clone())
     }
 
 }
@@ -391,7 +385,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         proof
     }
 
-    fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
+    fn verify(&self, wd: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
         let p_i = map_i_to_p_i(i);
 
         // Make sure proof is of the right size
@@ -400,17 +394,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         }
 
         // Verify accumulator proof
-        let accs_check = b
+        let accs_check = wd
             .iter()
             .zip(self.accs.iter())
             .zip(pi.iter())
             .all(|((bit, acc), w)| {
                 self.bit_verify(acc, bit, w, &p_i)
-                /*if *bit {
-                    acc.1.ver_mem(w, &p_i)
-                } else {
-                    acc.0.ver_mem(w, &p_i)
-                }*/
             });
 
         // Verify product proof
@@ -453,6 +442,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
 
+}
+
+// helper function that goes from a normal vec to something with bits;
+fn liftv(src:&Vec<bool>) -> Vec<Vec<bool>>
+{
+    let dst:Vec<Vec<bool>> =
+        src.iter().map(|x| vec![*x] ).collect();
+    dst.clone()
+}
+
+fn liftb(val:&bool) -> Vec<bool>
+{
+    vec![*val]
 }
 
 // impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> DynamicVectorCommitment<'a>
@@ -572,4 +574,27 @@ mod tests {
         );
 
     }
+
+    #[test]
+    fn test_yinyan_vc_bit() {
+
+        // Set up vector commitment
+        let mut rng = ChaChaRng::from_seed([0u8; 32]);
+        let config = Config {
+            lambda: 128,
+            k: 1,
+            n: 1024,
+            precomp_l: 1,
+            size: 4,
+        };
+
+        // accept if we can do prime partition correctly
+        let avec:Vec<bool> = vec![true, true, false, false];
+
+        let mut vc =
+            YinYanVectorCommitment::<Accumulator>::
+                setup::<RSAGroup, _>(&mut rng, &config);
+        vc.commit(&liftv(&avec));
+    }
+
 }
