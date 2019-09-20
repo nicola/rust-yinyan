@@ -91,6 +91,7 @@ fn partitioned_prime_prod(vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
 
 // same as above but start with primes
 fn partitioned_prime_prod_primes(vs:&Vec<bool>, pI:&[BigUint] ) -> (BigUint, BigUint) {
+    assert_eq!(vs.len(), pI.len());
     let mut rslt:Vec<BigUint> = vec![BigUint::one(), BigUint::one()];
 
     for (b, p_i) in vs.iter().zip(pI) {
@@ -135,7 +136,6 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N precomputed proofs
     pi_precomp: Vec<Proof>, // precomputed proofs
-    prd_precomp: Vec<BigUint> // precomputed products of primes, each for a chunk
 }
 
 #[derive(Clone, Debug)]
@@ -233,7 +233,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
         // let's start from square zero
         self.pi_precomp.clear();
-        self.prd_precomp.clear();
 
         let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
 
@@ -251,26 +250,88 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             // we have a vector of one element here as current impl is for k=1 only
             let aProof = vec![(pfs0[i].clone(), pfs1[i].clone())];
             self.pi_precomp.push( aProof );
-
-            let prd = compute_prod_for_chunk(&vals, i, self.precomp_l);
-            self.prd_precomp.push(prd);
         }
     }
 
     pub fn commit_and_precompute(&mut self, vals:&[Domain]) -> Commitment {
         let c = self.commit(vals);
-        println!("\n##got here##");
         self.precompute(vals);
         c
     }
 
+    // NB: i is an index between 0 and precomp_N-1. It's the index of a chunk!
     pub fn open_from_precomp(&self, i:usize) -> Proof
     {
-        // NB: i is an index between 0 and precomp_N-1. It's the index of a chunk!
+
         assert!(i < self.precomp_N);
         assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
 
         self.pi_precomp[i].clone()
+    }
+
+    // I contains chunk indices
+    pub fn batch_open_from_precomp(&self, chunks:&Vec<Vec<bool>>, I:&[usize]) -> BatchProof
+    {
+        // XXX: Supporting only k=1 for now
+        assert_eq!(self.k, 1);
+
+        // NB: we assume m is a power of 2
+        let m:usize = I.len();
+
+        // vector of all proofs
+        let prfs:Vec<BatchProofBit> = I.iter().map(
+            |i| self.open_from_precomp(*i)[0].clone()
+        ).collect();
+        //let prods = I.iter().map(|i| self.prd_precomp[*i]).collect();
+
+        let rslt_for_bit = self.aggregate_many_proofs_bit(&prfs, chunks, I);
+
+        // we package it
+        vec![rslt_for_bit]
+    }
+
+    fn aggregate_many_proofs_bit_helper(&self, prfs:&Vec<BatchProofBit>, part_prods:&Vec<(BigUint, BigUint)>) -> BatchProofBit
+    {
+        let m:usize = prfs.len();
+
+        if m == 1 {
+            return prfs[0].clone();
+        }
+        // We require m to be even
+        assert!(m % 2 == 0);
+
+        let mut new_prfs:Vec<BatchProofBit> = Vec::with_capacity(m/2);
+        let mut new_part_prods:Vec<(BigUint, BigUint)> = Vec::with_capacity(m/2);
+
+        for i in 0..(m/2) {
+            let L = 2*i; // left idx
+            let R = 2*i+1; // right idx
+
+            let alpha = part_prods[L].0.clone()*part_prods[R].0.clone();
+            let beta = part_prods[L].1.clone()*part_prods[R].1.clone();
+            new_part_prods.push( (alpha, beta) );
+
+            let pi = self.aggregate_proofs_bit_part_prod(&prfs[L], part_prods[L].clone(), &prfs[R], part_prods[R].clone());
+            new_prfs.push(pi);
+        }
+        self.aggregate_many_proofs_bit_helper(&new_prfs, &new_part_prods)
+    }
+
+    fn aggregate_many_proofs_bit(&self, prfs:&Vec<BatchProofBit>, chunks:&Vec<Vec<bool>>, I:&[usize]) -> BatchProofBit
+    {
+        // we aggregate by chunk here
+        // I is the subset of chunks we are opening
+        let part_prods:Vec<(BigUint, BigUint)> = I.iter().zip(chunks).map(
+            |(i,c)| {
+                let chunk_start = i*self.precomp_l;
+                let chunk_end = (i+1)*self.precomp_l;
+                let range:Vec<usize>  = (chunk_start..chunk_end).collect();
+                partitioned_prime_prod(c, &range )
+            }
+        ).collect();
+
+        let prf = self.aggregate_many_proofs_bit_helper(prfs, &part_prods);
+        prf
     }
 
     // This version is not for generic words but only for case k = 1 for now
@@ -279,14 +340,38 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         pf1:&BatchProofBit, vals1:&Vec<bool>, I1:&[usize],
         pf2:&BatchProofBit, vals2:&Vec<bool>, I2:&[usize]
     ) -> BatchProofBit {
-            // XXX: We assume for now I1 and I2 are disjoint
-            let (a1, b1) = partitioned_prime_prod(vals1, I1);
-            let (a2, b2) = partitioned_prime_prod(vals2, I2);
+            self.aggregate_proofs_bit_primes(
+                pf1, vals1, &to_primes(&I1.to_vec()), pf2, vals2, &to_primes(&I2.to_vec()))
+    }
 
-            let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &self.modulus).unwrap();
-            let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &self.modulus).unwrap();
+    // This version is not for generic words but only for case k = 1 for now
+    fn aggregate_proofs_bit_primes(
+        &self,
+        pf1:&BatchProofBit, vals1:&Vec<bool>, pI1:&[BigUint],
+        pf2:&BatchProofBit, vals2:&Vec<bool>, pI2:&[BigUint]
+    ) -> BatchProofBit {
 
-            (pf_zero.clone(), pf_one.clone())
+        // NB: We assume pI1 and pI2 are disjoint
+        let pp1 = partitioned_prime_prod_primes(vals1, pI1);
+        let pp2 = partitioned_prime_prod_primes(vals2, pI2);
+
+        self.aggregate_proofs_bit_part_prod(pf1, pp1, pf2, pp2)
+    }
+
+    // This version is not for generic words but only for case k = 1 for now
+    fn aggregate_proofs_bit_part_prod(
+        &self,
+        pf1:&BatchProofBit, part_prod1:(BigUint, BigUint),
+        pf2:&BatchProofBit, part_prod2:(BigUint, BigUint)
+    ) -> BatchProofBit {
+        // NB: We assume pI1 and pI2 are disjoint
+        let (a1, b1) = part_prod1;
+        let (a2, b2) = part_prod2;
+
+        let pf_zero = shamir_trick(&pf1.0, &pf2.0, &a1, &a2, &self.modulus).unwrap();
+        let pf_one = shamir_trick(&pf1.1, &pf2.1, &b1, &b2, &self.modulus).unwrap();
+
+        (pf_zero.clone(), pf_one.clone())
     }
 
     fn aggregate_proofs(
@@ -305,6 +390,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             }
             pfs
     }
+
 
 
     fn batch_verify_bits(&self,
@@ -358,7 +444,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             precomp_l: config.precomp_l,
             precomp_N: config.size/config.precomp_l,
             pi_precomp: Vec::with_capacity( config.size/config.precomp_l), // size is precomp_N
-            prd_precomp: Vec::with_capacity( config.size/config.precomp_l) // size is precomp_N
         }
     }
 
