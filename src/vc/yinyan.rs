@@ -85,11 +85,17 @@ pub struct Commitment {
 
 // produces two accumulators---one for the 0-vals; the other for the one-vals
 fn partitioned_prime_prod(vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
+    let pI = to_primes(&I.to_vec());
+    partitioned_prime_prod_primes(vs, &pI)
+}
+
+// same as above but start with primes
+fn partitioned_prime_prod_primes(vs:&Vec<bool>, pI:&[BigUint] ) -> (BigUint, BigUint) {
     let mut rslt:Vec<BigUint> = vec![BigUint::one(), BigUint::one()];
 
-    for (b, i) in vs.iter().zip(I) {
+    for (b, p_i) in vs.iter().zip(pI) {
         let b_idx = if *b {1} else {0};
-        rslt[b_idx] = rslt[b_idx].clone() * map_i_to_p_i(*i); // XXX: i is not the right idx
+        rslt[b_idx] = rslt[b_idx].clone() * p_i; // XXX: i is not the right idx
     }
 
     (rslt[0].clone(), rslt[1].clone())
@@ -99,18 +105,19 @@ fn all_primes(n:usize) -> Vec<BigUint> {
     (0..n).map( |i| map_i_to_p_i(i) ).collect()
 }
 
-fn precompute_helper(b:bool, l:usize,  g:&BigUint, modulus:&BigUint, ps:&Vec<BigUint>, vals:&Vec<bool>) -> Vec<BigUint>
-{
-    let f = |idx:usize| if vals[idx]==b {ps[idx].clone()} else {BigUint::one()};
 
-    // ps_b is the same as ps but "neutralizes" positions w/ 1-b as value
-    let ps_b:Vec<BigUint> = (0..ps.len()).map(f).collect();
-    let pfs_b = root_factor_general(g, ps_b.as_slice(), l, &modulus );
-    pfs_b
+
+
+fn compute_prod_for_chunk(vals:&Vec<bool>, idx:usize, l:usize) -> BigUint {
+    let range = (idx*l..(idx+1)*l);
+    let ps = to_primes(&range.collect());
+
+    let mut prd = BigUint::one();
+    for p in ps {
+        prd *= p;
+    }
+    prd
 }
-
-
-
 
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -127,7 +134,8 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     modulus: BigUint,
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N precomputed proofs
-    pi_precomp: Vec<Proof>
+    pi_precomp: Vec<Proof>, // precomputed proofs
+    prd_precomp: Vec<BigUint> // precomputed products of primes, each for a chunk
 }
 
 #[derive(Clone, Debug)]
@@ -204,6 +212,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         }
     }
 
+    fn precompute_helper(&self, b:bool, ps:&Vec<BigUint>, vals:&Vec<bool>) -> Vec<BigUint>
+    {
+        let g = self.uacc.g();
+        let l = self.precomp_l;
+
+        let f = |idx:usize| if vals[idx]==b {ps[idx].clone()} else {BigUint::one()};
+
+        // ps_b is the same as ps but "neutralizes" positions w/ 1-b as value
+        let ps_b:Vec<BigUint> = (0..ps.len()).map(f).collect();
+        let pfs_b = root_factor_general(g, ps_b.as_slice(), l, &self.modulus );
+        pfs_b
+    }
+
     pub fn precompute(&mut self, vals_:&[Domain])
     {
         // for now we force this
@@ -212,6 +233,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
         // let's start from square zero
         self.pi_precomp.clear();
+        self.prd_precomp.clear();
 
         let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
 
@@ -219,8 +241,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         let ps = all_primes(self.size); // all primes
         let g = self.uacc.g();
 
-        let pfs0 = precompute_helper(false, l,  g, &self.modulus, &ps, &vals);
-        let pfs1 = precompute_helper(true, l,  g, &self.modulus, &ps, &vals);
+        let pfs0 = self.precompute_helper(false, &ps, &vals);
+        let pfs1 = self.precompute_helper(true, &ps, &vals);
 
 
         assert_eq!(pfs1.len(), self.precomp_N);
@@ -229,6 +251,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             // we have a vector of one element here as current impl is for k=1 only
             let aProof = vec![(pfs0[i].clone(), pfs1[i].clone())];
             self.pi_precomp.push( aProof );
+
+            let prd = compute_prod_for_chunk(&vals, i, self.precomp_l);
+            self.prd_precomp.push(prd);
         }
     }
 
@@ -332,7 +357,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             _a: PhantomData,
             precomp_l: config.precomp_l,
             precomp_N: config.size/config.precomp_l,
-            pi_precomp: Vec::with_capacity( config.size/config.precomp_l)
+            pi_precomp: Vec::with_capacity( config.size/config.precomp_l), // size is precomp_N
+            prd_precomp: Vec::with_capacity( config.size/config.precomp_l) // size is precomp_N
         }
     }
 
@@ -508,6 +534,11 @@ fn map_i_to_p_i(i: usize) -> BigUint {
     hash_prime::<_, Blake2b>(&to_hash)
 }
 
+// generalization of map_i_to_p_i for vectors
+fn to_primes(I:&Vec<usize>) -> Vec<BigUint> {
+    I.iter().map(|i| map_i_to_p_i(*i)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,13 +667,6 @@ mod tests {
         let agg_vals = &[liftb(&avec[0]), liftb(&avec[1])];
         assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
 
-        // should not accept partition
-        let pf_agg =
-            vc.aggregate_proofs(
-                &pf0, &[vec![avec[0]]], &[0],
-                &pf1, &[vec![avec[1]]], &[1] );
-        let agg_vals = &[liftb(&avec[0]), liftb(&avec[1])];
-        assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
     }
 
 }
