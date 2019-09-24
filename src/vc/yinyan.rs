@@ -3,7 +3,8 @@ use byteorder::{BigEndian, ByteOrder};
 use num_bigint::{BigInt, BigUint, RandBigInt};
 use num_traits::cast::FromPrimitive;
 use num_traits::identities::One;
-
+use num_integer::Integer;
+use num_traits::{Signed, Zero};
 
 use crate::hash::hash_prime;
 use crate::proofs;
@@ -134,7 +135,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     prod_proofs: Vec<proofs::PoprodProof>,
     modulus: BigUint,
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
-    precomp_N: usize, // There are precomp_N precomputed proofs
+    precomp_N: usize, // There are precomp_N chunks (and precomputed proofs)
     pi_precomp: Vec<Proof>, // precomputed proofs
 }
 
@@ -300,19 +301,28 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         // We require m to be even
         assert!(m % 2 == 0);
 
-        let mut new_prfs:Vec<BatchProofBit> = Vec::with_capacity(m/2);
-        let mut new_part_prods:Vec<(BigUint, BigUint)> = Vec::with_capacity(m/2);
+        let m_prime = m.div_floor(&2);
 
-        for i in 0..(m/2) {
+        let mut new_prfs:Vec<BatchProofBit> = Vec::with_capacity(m_prime);
+        let mut new_part_prods:Vec<(BigUint, BigUint)> = Vec::with_capacity(m_prime);
+
+
+        for i in 0..m_prime {
             let L = 2*i; // left idx
             let R = 2*i+1; // right idx
+
+            println!("Going for iteration i={} with m={}", i, m);
 
             let alpha = part_prods[L].0.clone()*part_prods[R].0.clone();
             let beta = part_prods[L].1.clone()*part_prods[R].1.clone();
             new_part_prods.push( (alpha, beta) );
 
-            let pi = self.aggregate_proofs_bit_part_prod(&prfs[L], part_prods[L].clone(), &prfs[R], part_prods[R].clone());
+            let pi = self.aggregate_proofs_bit_part_prod(
+                &prfs[L], part_prods[L].clone(),
+                &prfs[R], part_prods[R].clone());
             new_prfs.push(pi);
+
+            println!("After aggregation of prod");
         }
         self.aggregate_many_proofs_bit_helper(&new_prfs, &new_part_prods)
     }

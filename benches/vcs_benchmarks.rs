@@ -27,11 +27,43 @@ mod vc_benches {
     const N:usize = 1048; // modulus size
     const L:usize = 128; // Not sure we are using it.
     const K:usize = 1;
-    const SZ:usize = 256;
+    const CHUNK_SZ:usize = 16;
+    const N_CHUNKS:usize = 32;
+    const SZ:usize = CHUNK_SZ*N_CHUNKS;
 
-    const N_ITERS:usize = 5;
+    const N_ITERS:usize = 2; // Set appropriately
 
     const SEED:[u8;32] = [1u8;32];
+
+    fn flatten_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> (Vec<bool>, Vec<usize>)
+    {
+        let mut rslt_vals:Vec<bool> = vec![];
+        let mut rslt_I:Vec<usize> = vec![];
+
+        for chk_i in chunks_I.iter() {
+            let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
+            for j in chk_rng {
+                rslt_I.push(j);
+                rslt_vals.push(all_vals[j].clone());
+            }
+        }
+        (rslt_vals, rslt_I)
+    }
+
+    fn collect_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> Vec<Vec<bool>>
+    {
+        let mut rslt_vals:Vec<Vec<bool>> = vec![];
+
+        for chk_i in chunks_I.iter() {
+            let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
+            let mut cur_chk = vec![];
+            for j in chk_rng {
+                cur_chk.push(all_vals[j].clone());
+            }
+            rslt_vals.push(cur_chk);
+        }
+        rslt_vals
+    }
 
 
     fn make_vc<'a, A>() -> (binary::BinaryVectorCommitment<'a, A>, yinyan::YinYanVectorCommitment<'a, A>)
@@ -42,7 +74,7 @@ mod vc_benches {
         let config_bbf = binary::Config { lambda: L, n: N };
         let mut vc_bbf = binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
-        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: 1, size: SZ };
+        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: CHUNK_SZ, size: SZ };
         let mut vc_yy = yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
         (vc_bbf, vc_yy)
@@ -51,6 +83,7 @@ mod vc_benches {
     fn bench_bbf_commit(c: &mut Criterion) {
         // m_opn: opening size
         //let m_opn = 10;
+        let m_opn = 16;
 
         let mut rng = ChaChaRng::from_seed(SEED);
 
@@ -81,10 +114,19 @@ mod vc_benches {
 
         // Run Open benchmarks
         {
+            let chks_I:Vec<usize> = (0..m_opn).collect();
+            /* map(
+                |_| { let tmp:usize = rng.gen(); tmp % N_CHUNKS }
+            ).collect(); */
+            let (bbf_opn_vals, bbf_opn_I) = flatten_chunks(&val_bbf, &chks_I, CHUNK_SZ);
+            let yy_opn_vals = collect_chunks(&val_bbf, &chks_I, CHUNK_SZ);
+
             let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
             c
-                .bench_function("bench_bbf_open", move |b| b.iter(|| bbf.open(&FIXED_V, FIXED_IDX) )) // XXX: Should become a batch open whenever we have l>=1
-                .bench_function("bench_yinyan_open_precomp", move |b| b.iter(|| yy.open_from_precomp(FIXED_IDX) ));
+                .bench_function("bench_bbf_batch_open",
+                    move |b| b.iter(|| bbf.batch_open(&bbf_opn_vals, &bbf_opn_I) ))
+                .bench_function("bench_yinyan_open_precomp",
+                    move |b| b.iter(|| yy.batch_open_from_precomp(&yy_opn_vals, &chks_I) ));
         }
 
         let pi_bbf = vc_bbf.open(&FIXED_V, FIXED_IDX);

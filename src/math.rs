@@ -60,6 +60,7 @@ pub fn shamir_trick(
     let g2 = root_y.modpow(y, n);
 
     if g1 != g2 {
+        println!("Error: g1 != g2 in Shamir's trick");
         return None;
     }
 
@@ -113,8 +114,8 @@ pub fn root_factor_general(g: &BigUint, x: &[BigUint], l:usize, n: &BigUint) -> 
         g.modpow(&p, n)
     };
 
-    let mut res = root_factor(&g_l, x_l, n);
-    res.extend(root_factor(&g_r, x_r, n));
+    let mut res = root_factor_general(&g_l, x_l, l, n);
+    res.extend(root_factor_general(&g_r, x_r, l, n));
 
     res
 }
@@ -202,6 +203,33 @@ mod tests {
                 assert_eq!(&root.clone().modpow(x_i, &n), &y);
             }
         }
+
+        // root_factor_general
+
+        let bitsz:usize = 64;
+        let n = rng.gen_biguint(bitsz);
+        let g = rng.gen_biguint(bitsz);
+        let m: usize = 32;
+        let l: usize = 8;
+
+        let x = (0..m).map(|_| rng.gen_biguint(bitsz)).collect::<Vec<_>>();
+        let r = root_factor_general(&g, &x, l, &n);
+        assert_eq!(r.len(), m/l);
+
+        let prod_exp:BigUint = x.iter().fold(BigUint::one(), |a, b| a*b);
+        let prod:BigUint = g.modpow(&prod_exp, &n);
+
+        for chk in 0..(m/l) {
+            let root_chk = r[chk].clone();
+
+            let mut chk_prod = BigUint::one();
+            for j in (l*chk)..(l*(chk+1)) {
+                chk_prod *= x[j].clone();
+            }
+
+            assert_eq!(prod, root_chk.modpow(&chk_prod, &n));
+        }
+
     }
 
     #[test]

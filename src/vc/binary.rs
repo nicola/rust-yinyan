@@ -40,6 +40,12 @@ pub struct Config {
     pub n: usize,
 }
 
+impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator>
+    BinaryVectorCommitment<'a, A>
+{
+
+}
+
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitment<'a>
     for BinaryVectorCommitment<'a, A>
 {
