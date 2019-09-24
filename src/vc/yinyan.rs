@@ -311,7 +311,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             let L = 2*i; // left idx
             let R = 2*i+1; // right idx
 
-            println!("Going for iteration i={} with m={}", i, m);
+            //println!("Going for iteration i={} with m={}", i, m);
 
             let alpha = part_prods[L].0.clone()*part_prods[R].0.clone();
             let beta = part_prods[L].1.clone()*part_prods[R].1.clone();
@@ -322,7 +322,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                 &prfs[R], part_prods[R].clone());
             new_prfs.push(pi);
 
-            println!("After aggregation of prod");
+            //println!("After aggregation of prod");
         }
         self.aggregate_many_proofs_bit_helper(&new_prfs, &new_part_prods)
     }
