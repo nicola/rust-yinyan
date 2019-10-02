@@ -158,7 +158,7 @@ mod vc_benches {
         // m_opn: opening size
         //let m_opn = 10;
         //let m_opn = 16;
-        let params = vec! [ (256, 128, 32) ]; // (chunk_sz, n_chunks, opn_sz)
+        let params = vec! [ (2048, 256, 64) ]; // (chunk_sz, n_chunks, opn_sz)
         for (i,param) in params.iter().enumerate() {
             bench_bbf_commit_impl(c, i, param.0, param.1, param.2);
         }
