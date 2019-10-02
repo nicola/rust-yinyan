@@ -9,6 +9,57 @@ use crate::math::{modpow_uint_int, root_factor, shamir_trick};
 use crate::proofs;
 use crate::traits::*;
 
+use blake2::Blake2b;
+use byteorder::{BigEndian, ByteOrder};
+use num_traits::cast::FromPrimitive;
+use num_traits::identities::One;
+
+use crate::hash::hash_prime;
+use crate::proofs;
+use crate::traits::*;
+use rand::{CryptoRng, Rng};
+use std::marker::PhantomData;
+
+
+// Prime Hashing object. Also allows for caching
+#[derive(Clone,Debug)]
+pub struct PrimeHash {
+    max_sz:usize,
+    cache: Vec<BigUint>,
+}
+
+impl PrimeHash {
+    pub fn init(N:usize) -> Self {
+        let mut ph = PrimeHash {
+            max_sz: N.clone(),
+            cache: Vec::with_capacity(N.clone())
+        };
+        if N > 1 << 25 {
+            println!("Warning: This will occupy more than 200 Megabytes!");
+        }
+        ph.precompute();
+        ph
+    }
+
+    fn map_i_to_p_i(i: usize) -> BigUint {
+        let mut to_hash = [0u8; 8];
+        BigEndian::write_u64(&mut to_hash, i as u64);
+        hash_prime::<_, Blake2b>(&to_hash)
+    }
+
+
+    fn precompute(&mut self) {
+        for i in 0..self.max_sz {
+            self.cache.append(PrimeHash::map_i_to_p_i(i));
+        }
+    }
+    pub fn get(&self, i:usize) -> BigUint {
+        self.cache[i]
+    }
+
+
+}
+
 // All accumulated values are small odd primes.
 // Arbitrary data values can be hashed to small primes,
 // It is also assumed that no item is added twice to the accumulator !!!
