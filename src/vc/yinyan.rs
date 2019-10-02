@@ -12,6 +12,7 @@ use crate::traits::*;
 use crate::math::{shamir_trick, root_factor_general};
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use crate::accumulator::PrimeHash;
 
@@ -87,8 +88,8 @@ pub struct Commitment {
 
 
 // produces two accumulators---one for the 0-vals; the other for the one-vals
-fn partitioned_prime_prod(vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
-    let pI = to_primes(&I.to_vec());
+fn partitioned_prime_prod(ph: &PrimeHash, vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
+    let pI = to_primes(ph, &I.to_vec());
     partitioned_prime_prod_primes(vs, &pI)
 }
 
@@ -105,16 +106,16 @@ fn partitioned_prime_prod_primes(vs:&Vec<bool>, pI:&[BigUint] ) -> (BigUint, Big
     (rslt[0].clone(), rslt[1].clone())
 }
 
-fn all_primes(n:usize) -> Vec<BigUint> {
-    (0..n).map( |i| map_i_to_p_i(i) ).collect()
+fn all_primes(ph:&PrimeHash, n:usize) -> Vec<BigUint> {
+    (0..n).map( |i| ph.get(i) ).collect()
 }
 
 
 
 
-fn compute_prod_for_chunk(vals:&Vec<bool>, idx:usize, l:usize) -> BigUint {
+fn compute_prod_for_chunk(ph: &PrimeHash, vals:&Vec<bool>, idx:usize, l:usize) -> BigUint {
     let range = (idx*l..(idx+1)*l);
-    let ps = to_primes(&range.collect());
+    let ps = to_primes(ph, &range.collect());
 
     let mut prd = BigUint::one();
     for p in ps {
@@ -139,7 +140,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N chunks (and precomputed proofs)
     pi_precomp: Vec<Proof>, // precomputed proofs
-    hash: &'a PrimeHash
+    hash: Rc<PrimeHash>
 }
 
 #[derive(Clone, Debug)]
@@ -148,7 +149,8 @@ pub struct Config {
     pub k: usize,
     pub n: usize,
     pub size: usize,
-    pub precomp_l: usize
+    pub precomp_l: usize,
+    pub ph: Rc<PrimeHash>
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
@@ -177,7 +179,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         // TODO: if already specialized skip first part
         for i in 0..size {
             // TODO: eventually do batchadd (check how we do it in commit)
-            self.uacc.add(&map_i_to_p_i(i));
+            self.uacc.add(&self.hash.get(i));
         }
 
         self.uacc.state()
@@ -241,7 +243,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
 
         let l:usize = self.precomp_l;
-        let ps = all_primes(self.size); // all primes
+        let ps = all_primes(&self.hash, self.size); // all primes
         let g = self.uacc.g();
 
         let pfs0 = self.precompute_helper(false, &ps, &vals);
@@ -339,7 +341,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                 let chunk_start = i*self.precomp_l;
                 let chunk_end = (i+1)*self.precomp_l;
                 let range:Vec<usize>  = (chunk_start..chunk_end).collect();
-                partitioned_prime_prod(c, &range )
+                partitioned_prime_prod(&self.hash, c, &range )
             }
         ).collect();
 
@@ -354,7 +356,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         pf2:&BatchProofBit, vals2:&Vec<bool>, I2:&[usize]
     ) -> BatchProofBit {
             self.aggregate_proofs_bit_primes(
-                pf1, vals1, &to_primes(&I1.to_vec()), pf2, vals2, &to_primes(&I2.to_vec()))
+                pf1, vals1, &to_primes(&self.hash, &I1.to_vec()), pf2, vals2, &to_primes(&self.hash, &I2.to_vec()))
     }
 
     // This version is not for generic words but only for case k = 1 for now
@@ -409,7 +411,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     fn batch_verify_bits(&self,
         pos_in_word:usize, bits: &Vec<bool>, I: &[usize],
         pi: &BatchProofBit) -> bool {
-        let (p0, p1) = partitioned_prime_prod(bits, I);
+        let (p0, p1) = partitioned_prime_prod(&self.hash, bits, I);
         let (pf0, pf1) = pi;
         let acc = &self.accs[pos_in_word];
         let rslt = acc.1.ver_mem(pf1, &p1) && acc.0.ver_mem(pf0, &p0);
@@ -457,6 +459,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             precomp_l: config.precomp_l,
             precomp_N: config.size/config.precomp_l,
             pi_precomp: Vec::with_capacity( config.size/config.precomp_l), // size is precomp_N
+            hash: Rc::clone(&config.ph),
         }
     }
 
@@ -464,9 +467,11 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         // i = 0..m (m number of words)
         for (i, v) in words.iter().enumerate() {
             debug_assert!(v.len() == self.k);
+            debug_assert!(i < self.hash.max_sz);
+
 
             // p_i
-            let prime = self.ph.get(i);
+            let prime = self.hash.get(i);
 
             // j = 0..k (k number of bits in each word)
             // TODO: can be done with batch add!
@@ -517,7 +522,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn open(&self, wd: &Self::Domain, i: usize) -> Self::Proof {
-        let p_i = self.ph.get(i);
+        let p_i = self.hash.get(i);
 
         let proof: Proof = wd
             .iter().enumerate()
@@ -536,7 +541,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn verify(&self, wd: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
-        let p_i = self.ph.get(i);
+        let p_i = self.hash.get(i);
 
         // Make sure proof is of the right size
         if self.prod_proofs.len() != self.k || pi.len() != self.k {
@@ -657,24 +662,27 @@ mod tests {
 
         // Set up vector commitment
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
+
         let config = Config {
             lambda: 128,
             k: 2,
             n: 1024,
             precomp_l: 1,
             size: 4,
+            ph: Rc::new(PrimeHash::init(4))
         };
 
-        let ph = PrimeHash::setup(4);
+        let ph:&PrimeHash = &config.ph;
+
 
         // accept if we can do prime partition correctly
         let avec:Vec<bool> = vec![true, true, false, false];
-        let (a, b) = partitioned_prime_prod(&avec, &[0,1, 2, 3]);
-        assert_eq!(a, map_i_to_p_i(2)*map_i_to_p_i(3));
-        assert_eq!(b, map_i_to_p_i(0)*map_i_to_p_i(1));
+        let (a, b) = partitioned_prime_prod(&config.ph, &avec, &[0,1, 2, 3]);
+        assert_eq!(a, ph.get(2)*ph.get(3));
+        assert_eq!(b, ph.get(0)*ph.get(1));
 
         let mut vc =
-            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config, ph);
+            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
 
 
@@ -734,12 +742,15 @@ mod tests {
 
         // Set up vector commitment
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
+        let ph = Rc::new(PrimeHash::init(4));
+
         let config = Config {
             lambda: 128,
             k: 1,
             n: 1024,
             precomp_l: 1,
             size: 4,
+            ph: ph
         };
 
         // accept if we can do prime partition correctly

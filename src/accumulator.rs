@@ -12,33 +12,34 @@ use crate::traits::*;
 use blake2::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use num_traits::cast::FromPrimitive;
-use num_traits::identities::One;
+//use num_traits::identities::One;
 
 use crate::hash::hash_prime;
-use crate::proofs;
-use crate::traits::*;
-use rand::{CryptoRng, Rng};
+
 use std::marker::PhantomData;
+
+//#[macro_use]
+//extern crate blake2;
 
 
 // Prime Hashing object. Also allows for caching
 #[derive(Clone,Debug)]
 pub struct PrimeHash {
-    max_sz:usize,
-    cache: Vec<BigUint>,
+    pub max_sz:usize,
+    pub cache: Vec<BigUint>,
 }
 
 impl PrimeHash {
     pub fn init(N:usize) -> Self {
-        let mut ph = PrimeHash {
-            max_sz: N.clone(),
-            cache: Vec::with_capacity(N.clone())
-        };
+        let mut cache:Vec<BigUint> = Vec::with_capacity(N.clone());
         if N > 1 << 25 {
             println!("Warning: This will occupy more than 200 Megabytes!");
         }
-        ph.precompute();
-        ph
+        PrimeHash::precompute(N, &mut cache);
+        PrimeHash {
+            max_sz: N.clone(),
+            cache: cache
+        }
     }
 
     fn map_i_to_p_i(i: usize) -> BigUint {
@@ -48,13 +49,15 @@ impl PrimeHash {
     }
 
 
-    fn precompute(&mut self) {
-        for i in 0..self.max_sz {
-            self.cache.append(PrimeHash::map_i_to_p_i(i));
+    fn precompute(max_sz:usize, cache:&mut Vec<BigUint>) {
+        for i in 0..max_sz {
+            cache.push(PrimeHash::map_i_to_p_i(i));
         }
     }
+
     pub fn get(&self, i:usize) -> BigUint {
-        self.cache[i]
+        assert!(i < self.max_sz, format!("Calling PrimeHash::get on {} when max_sz is only {}", i, self.max_sz));
+        self.cache[i].clone()
     }
 
 
@@ -84,7 +87,10 @@ pub struct Accumulator {
     set: BigUint,
 }
 
-impl Accumulator {}
+
+impl Accumulator {
+
+}
 
 impl FromParts for Accumulator {
     fn from_parts(n: BigUint, g: BigUint) -> Self {
@@ -163,6 +169,18 @@ impl StaticAccumulator for Accumulator {
     fn ver_mem(&self, w: &BigUint, x: &BigUint) -> bool {
         w.modpow(x, &self.n) == self.root
     }
+
+    fn cleared(&self) -> Self
+    {
+        Accumulator {
+            int_size_bits: self.int_size_bits,
+            root: self.g.clone(),
+            g: self.g.clone(),
+            n: self.n.clone(),
+            set: BigUint::one(),
+        }
+    }
+
 }
 
 impl DynamicAccumulator for Accumulator {

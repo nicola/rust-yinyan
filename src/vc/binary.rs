@@ -7,6 +7,9 @@ use num_traits::{One, Zero};
 use rand::CryptoRng;
 use rand::Rng;
 use std::marker::PhantomData;
+use std::rc::Rc;
+use crate::accumulator::PrimeHash;
+
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
@@ -16,6 +19,7 @@ pub struct BinaryVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     acc: A,
     pos: usize,
     _a: PhantomData<&'a A>,
+    hash: Rc<PrimeHash>,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -38,6 +42,7 @@ pub struct BatchProof(
 pub struct Config {
     pub lambda: usize,
     pub n: usize,
+    pub ph: Rc<PrimeHash>,
 }
 
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator>
@@ -67,25 +72,30 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             acc: A::setup::<G, _>(rng, config.lambda),
             pos: 0,
             _a: PhantomData,
+            hash: Rc::clone(&config.ph),
         }
     }
 
     fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment {
+        self.pos = 0;
+        //println!("Committing to vec of size {}", m.len() );
+        //m.iter().enumerate().for_each(|(i,x)| {println!("({}, {})", i, x);} );
         let primes = m
             .iter()
             .enumerate()
             .filter(|(_, &m_i)| m_i)
-            .map(|(i, _)| map_i_to_p_i(self.pos + i))
+            .map(|(i, _)| {let x = self.pos + i; /*println!("Getting pos #{}", x); */  self.hash.get(x) })
             .collect::<Vec<_>>();
 
-        self.pos += m.len();
+        self.pos = m.len();
+        self.acc = self.acc.cleared(); // XXX: Reset everything
         self.acc.batch_add(&primes);
 
         self.acc.state().clone()
     }
 
     fn open(&self, b: &Self::Domain, i: usize) -> Self::Proof {
-        let p_i = map_i_to_p_i(i);
+        let p_i = self.hash.get(i);
 
         if *b {
             Proof::Mem(self.acc.mem_wit_create(&p_i))
@@ -96,7 +106,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     }
 
     fn verify(&self, b: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
-        let p_i = map_i_to_p_i(i);
+        let p_i = self.hash.get(i);
 
         if *b {
             match pi {
@@ -128,7 +138,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
 
         let mut p_ones = BigUint::one();
         for j in ones {
-            p_ones *= map_i_to_p_i(i[j]);
+            p_ones *= self.hash.get(i[j]);
         }
 
         let pi_i = if p_ones.is_one() {
@@ -139,7 +149,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
 
         let mut p_zeros = BigUint::one();
         for j in zeros {
-            p_zeros *= map_i_to_p_i(i[j]);
+            p_zeros *= self.hash.get(i[j]);
         }
 
         let pi_e = if p_zeros.is_one() {
@@ -167,7 +177,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
 
         let mut p_ones = BigUint::one();
         for j in ones {
-            p_ones *= map_i_to_p_i(i[j]);
+            p_ones *= self.hash.get(i[j]);
         }
 
         if !p_ones.is_one() && !self.acc.ver_mem_star(&p_ones, &pi.0) {
@@ -182,7 +192,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
 
         let mut p_zeros = BigUint::one();
         for j in zeros {
-            p_zeros *= map_i_to_p_i(i[j]);
+            p_zeros *= self.hash.get(i[j]);
         }
 
         if !p_zeros.is_one() && !self.acc.ver_non_mem_star(&p_zeros, &pi.1) {
@@ -204,9 +214,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitm
         if b == b_prime {
             // Nothing to do
         } else if *b {
-            self.acc.add(&map_i_to_p_i(i));
+            self.acc.add(&self.hash.get(i));
         } else {
-            self.acc.del(&map_i_to_p_i(i)).expect("not a member");
+            self.acc.del(&self.hash.get(i)).expect("not a member");
         }
     }
 }
@@ -226,7 +236,9 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let config = Config { lambda, n };
+        let ph = Rc::new(PrimeHash::init(64));
+
+        let config = Config { lambda, n,  ph };
         let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
@@ -254,7 +266,9 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let config = Config { lambda, n };
+        let ph = Rc::new(PrimeHash::init(64));
+        let config = Config { lambda, n,  ph };
+
         let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();
@@ -274,7 +288,8 @@ mod tests {
         let n = 1024;
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let config = Config { lambda, n };
+        let ph = Rc::new(PrimeHash::init(64));
+        let config = Config { lambda, n,  ph };
         let mut vc = BinaryVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
 
         let mut val: Vec<bool> = (0..64).map(|_| rng.gen()).collect();

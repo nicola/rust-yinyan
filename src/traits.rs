@@ -28,6 +28,8 @@ pub trait StaticAccumulator {
     fn ver_mem(&self, w: &BigUint, x: &BigUint) -> bool;
 
     fn state(&self) -> &BigUint;
+
+    fn cleared(&self) -> Self;
 }
 
 pub trait DynamicAccumulator: StaticAccumulator {

@@ -12,6 +12,8 @@ extern crate blake2;
 
 use criterion::{Criterion, Benchmark};
 
+use std::rc::Rc;
+
 //These benches are taken from various places.
 
 mod vc_benches {
@@ -67,16 +69,16 @@ mod vc_benches {
     }
 
 
-    fn make_vc<'a, A>(chunk_sz: usize, sz: usize) -> (binary::BinaryVectorCommitment<'a, A>, yinyan::YinYanVectorCommitment<'a, A>)
+    fn make_vc<'a, A>(chunk_sz: usize, sz: usize, ph: &Rc<PrimeHash>) -> (binary::BinaryVectorCommitment<'a, A>, yinyan::YinYanVectorCommitment<'a, A>)
     where A: accumulators::BatchedAccumulator + accumulators::UniversalAccumulator + accumulators::FromParts {
         let mut rng = ChaChaRng::from_seed(SEED);
 
 
-        let config_bbf = binary::Config { lambda: L, n: N };
+        let config_bbf = binary::Config { lambda: L, n: N, ph: ph.clone() };
         let mut vc_bbf =
             binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
-        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: chunk_sz, size: sz };
+        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: chunk_sz, size: sz, ph: ph.clone() };
         let mut vc_yy =
             yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
@@ -93,11 +95,11 @@ mod vc_benches {
             format!("{}_CHKSZ={}_N_CHKS={}_OPNSZ={}", s, chunk_sz, n_chunks, opn_sz)
         };
 
-        let ph = PrimeHash::init(sz);
+        let ph = Rc::new(PrimeHash::init(sz)); 
 
 
         let (mut vc_bbf, mut vc_yy) =
-            make_vc::<'_, Accumulator>(chunk_sz, sz, ph);
+            make_vc::<'_, Accumulator>(chunk_sz, sz, &ph);
 
         const FIXED_IDX:usize = 3;
         const FIXED_V:bool = false;
@@ -113,6 +115,7 @@ mod vc_benches {
         {
             let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
             let (val_bbf2, val_yy2) = (val_bbf.clone(), val_yy.clone());
+            println!("There are {} values!", val_bbf2.len());
 
             c
                 .bench_function(&myfmt("bench_bbf_commit"),
@@ -164,7 +167,7 @@ mod vc_benches {
         // m_opn: opening size
         //let m_opn = 10;
         //let m_opn = 16;
-        let params = vec! [ (4096, 256, 64) ]; // (chunk_sz, n_chunks, opn_sz)
+        let params = vec! [ (16, 32, 4) ]; // (chunk_sz, n_chunks, opn_sz)
         for (i,param) in params.iter().enumerate() {
             bench_bbf_commit_impl(c, i, param.0, param.1, param.2);
         }

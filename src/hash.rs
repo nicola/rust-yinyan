@@ -4,8 +4,7 @@ use generic_array::ArrayLength;
 use num_bigint::prime::probably_prime;
 use num_bigint::BigUint;
 use num_integer::Integer;
-#[macro_use]
-extern crate blake2;
+
 
 
 // When the proofs are made non-interactive, using the

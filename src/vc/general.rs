@@ -7,7 +7,10 @@ use rand::{CryptoRng, Rng};
 use crate::traits::*;
 use crate::vc::binary::Config;
 use crate::vc::BinaryVectorCommitment;
+use crate::accumulator::PrimeHash;
 
+
+/*
 pub fn create_vector_commitment<
     'a,
     A: 'a + UniversalAccumulator + BatchedAccumulator,
@@ -229,3 +232,4 @@ mod tests {
         assert!(vc.verify(&new_val, 2, &comm_new), "invalid commitment");
     }
 }
+*/
