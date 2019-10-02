@@ -211,11 +211,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> DynamicVectorCommitm
     }
 }
 
-fn map_i_to_p_i(i: usize) -> BigUint {
-    let mut to_hash = [0u8; 8];
-    BigEndian::write_u64(&mut to_hash, i as u64);
-    hash_prime::<_, Blake2b>(&to_hash)
-}
 
 #[cfg(test)]
 mod tests {

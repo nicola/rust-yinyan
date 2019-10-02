@@ -16,6 +16,7 @@ use criterion::{Criterion, Benchmark};
 
 mod vc_benches {
     use super::*;
+    use accumulators::PrimeHash;
     use accumulators::group::RSAGroup;
     use accumulators::traits::{BatchedAccumulator, StaticAccumulator, StaticVectorCommitment};
     use accumulators::Accumulator;
@@ -24,7 +25,7 @@ mod vc_benches {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    const N:usize = 3072; // modulus size
+    const N:usize = 2048; // modulus size
     const L:usize = 128; // Not sure we are using it.
     const K:usize = 1;
     //const CHUNK_SZ:usize = 16;
@@ -72,10 +73,12 @@ mod vc_benches {
 
 
         let config_bbf = binary::Config { lambda: L, n: N };
-        let mut vc_bbf = binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
+        let mut vc_bbf =
+            binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
         let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: chunk_sz, size: sz };
-        let mut vc_yy = yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
+        let mut vc_yy =
+            yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
         (vc_bbf, vc_yy)
     }
@@ -90,8 +93,11 @@ mod vc_benches {
             format!("{}_CHKSZ={}_N_CHKS={}_OPNSZ={}", s, chunk_sz, n_chunks, opn_sz)
         };
 
+        let ph = PrimeHash::init(sz);
 
-        let (mut vc_bbf, mut vc_yy) = make_vc::<'_, Accumulator>(chunk_sz, sz);
+
+        let (mut vc_bbf, mut vc_yy) =
+            make_vc::<'_, Accumulator>(chunk_sz, sz, ph);
 
         const FIXED_IDX:usize = 3;
         const FIXED_V:bool = false;
@@ -158,7 +164,7 @@ mod vc_benches {
         // m_opn: opening size
         //let m_opn = 10;
         //let m_opn = 16;
-        let params = vec! [ (2048, 256, 64) ]; // (chunk_sz, n_chunks, opn_sz)
+        let params = vec! [ (4096, 256, 64) ]; // (chunk_sz, n_chunks, opn_sz)
         for (i,param) in params.iter().enumerate() {
             bench_bbf_commit_impl(c, i, param.0, param.1, param.2);
         }

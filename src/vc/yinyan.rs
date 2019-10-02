@@ -13,6 +13,8 @@ use crate::math::{shamir_trick, root_factor_general};
 use rand::{CryptoRng, Rng};
 use std::marker::PhantomData;
 
+use crate::accumulator::PrimeHash;
+
 // pub struct CachedAcc {
 //     int_size_bits: usize,
 //     g: BigUint,
@@ -137,6 +139,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     precomp_l: usize, // each precomputed proof refers to a chunk of size precomp_l
     precomp_N: usize, // There are precomp_N chunks (and precomputed proofs)
     pi_precomp: Vec<Proof>, // precomputed proofs
+    hash: &'a PrimeHash
 }
 
 #[derive(Clone, Debug)]
@@ -463,7 +466,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             debug_assert!(v.len() == self.k);
 
             // p_i
-            let prime = map_i_to_p_i(i);
+            let prime = self.ph.get(i);
 
             // j = 0..k (k number of bits in each word)
             // TODO: can be done with batch add!
@@ -514,7 +517,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn open(&self, wd: &Self::Domain, i: usize) -> Self::Proof {
-        let p_i = map_i_to_p_i(i);
+        let p_i = self.ph.get(i);
 
         let proof: Proof = wd
             .iter().enumerate()
@@ -533,7 +536,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn verify(&self, wd: &Self::Domain, i: usize, pi: &Self::Proof) -> bool {
-        let p_i = map_i_to_p_i(i);
+        let p_i = self.ph.get(i);
 
         // Make sure proof is of the right size
         if self.prod_proofs.len() != self.k || pi.len() != self.k {
@@ -623,15 +626,10 @@ fn liftb(val:&bool) -> Vec<bool>
 //     }
 // }
 
-fn map_i_to_p_i(i: usize) -> BigUint {
-    let mut to_hash = [0u8; 8];
-    BigEndian::write_u64(&mut to_hash, i as u64);
-    hash_prime::<_, Blake2b>(&to_hash)
-}
 
 // generalization of map_i_to_p_i for vectors
-fn to_primes(I:&Vec<usize>) -> Vec<BigUint> {
-    I.iter().map(|i| map_i_to_p_i(*i)).collect()
+fn to_primes(ph:&PrimeHash, I:&Vec<usize>) -> Vec<BigUint> {
+    I.iter().map(|i| ph.get(*i)).collect()
 }
 
 #[cfg(test)]
@@ -667,13 +665,16 @@ mod tests {
             size: 4,
         };
 
+        let ph = PrimeHash::setup(4);
+
         // accept if we can do prime partition correctly
         let avec:Vec<bool> = vec![true, true, false, false];
         let (a, b) = partitioned_prime_prod(&avec, &[0,1, 2, 3]);
         assert_eq!(a, map_i_to_p_i(2)*map_i_to_p_i(3));
         assert_eq!(b, map_i_to_p_i(0)*map_i_to_p_i(1));
 
-        let mut vc = YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config);
+        let mut vc =
+            YinYanVectorCommitment::<Accumulator>::setup::<RSAGroup, _>(&mut rng, &config, ph);
 
 
 
