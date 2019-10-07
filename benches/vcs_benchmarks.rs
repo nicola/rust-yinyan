@@ -27,6 +27,19 @@ mod vc_benches {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
+    // syntax: chunk_size, n_chunks, opn_size (in chunks)
+    static PRE_PARAMS: &'static [(usize,usize,usize)] = &[
+        (16, 32, 4),
+    ];
+
+    // syntax: (vector_size (bits), opn_size)
+    static NON_PRE_PARAMS: &'static [(usize,usize)] = &[
+        (512, 64),
+        (1024, 128),
+        (2048, 256),
+    ];
+
+
     const N:usize = 2048; // modulus size
     const L:usize = 128; // Not sure we are using it.
     const K:usize = 1;
@@ -86,7 +99,7 @@ mod vc_benches {
     }
 
 
-    fn bench_bbf_commit_impl(c: &mut Criterion, tag:usize, chunk_sz:usize, n_chunks:usize, opn_sz:usize)
+    fn bench_commit_pre_impl(c: &mut Criterion, tag:usize, chunk_sz:usize, n_chunks:usize, opn_sz:usize)
     {
         let sz = n_chunks * chunk_sz;
         let mut rng = ChaChaRng::from_seed(SEED);
@@ -95,18 +108,14 @@ mod vc_benches {
             format!("{}_CHKSZ={}_N_CHKS={}_OPNSZ={}", s, chunk_sz, n_chunks, opn_sz)
         };
 
-        let ph = Rc::new(PrimeHash::init(sz)); 
+        let ph = Rc::new(PrimeHash::init(sz));
 
 
         let (mut vc_bbf, mut vc_yy) =
             make_vc::<'_, Accumulator>(chunk_sz, sz, &ph);
 
-        const FIXED_IDX:usize = 3;
-        const FIXED_V:bool = false;
-
         // setting up BBF
         let mut val_bbf: Vec<bool> = (0..sz).map(|_| rng.gen()).collect();
-        val_bbf[FIXED_IDX] = FIXED_V;
 
         // setting up YY (Same values as val_bbf but in different format)
         let val_yy : Vec<Vec<bool>> = val_bbf.iter().map(|v| vec![*v]).collect();
@@ -163,13 +172,100 @@ mod vc_benches {
 
     }
 
-    fn bench_bbf_commit(c: &mut Criterion) {
+    fn bench_commit_pre(c: &mut Criterion) {
         // m_opn: opening size
         //let m_opn = 10;
         //let m_opn = 16;
-        let params = vec! [ (16, 32, 4) ]; // (chunk_sz, n_chunks, opn_sz)
-        for (i,param) in params.iter().enumerate() {
-            bench_bbf_commit_impl(c, i, param.0, param.1, param.2);
+        //let params = vec! [ (16, 32, 4) ]; // (chunk_sz, n_chunks, opn_sz)
+        for (i,param) in PRE_PARAMS.iter().enumerate() {
+            bench_commit_pre_impl(c, i, param.0, param.1, param.2);
+        }
+
+    }
+
+    fn bench_commit_non_pre_impl(c: &mut Criterion, tag:usize, sz:usize, opn_sz:usize)
+    {
+        //let sz = n_chunks * chunk_sz;
+        let mut rng = ChaChaRng::from_seed(SEED);
+
+        let chunk_sz = 1; // we do not use this anyway
+
+        let myfmt = |s| -> String {
+            format!("{}_VECSZ={}_OPNSZ={}", s, sz, opn_sz)
+        };
+
+        let ph = Rc::new(PrimeHash::init(sz));
+
+
+        let (mut vc_bbf, mut vc_yy) =
+            make_vc::<'_, Accumulator>(chunk_sz, sz, &ph);
+
+        // setting up BBF
+        let mut val_bbf: Vec<bool> = (0..sz).map(|_| rng.gen()).collect();
+
+        // setting up YY (Same values as val_bbf but in different format)
+        let val_yy : Vec<Vec<bool>> = val_bbf.iter().map(|v| vec![*v]).collect();
+
+        // Run Commit benchmarks
+        {
+            let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
+            let (val_bbf2, val_yy2) = (val_bbf.clone(), val_yy.clone());
+            //println!("There are {} values!", val_bbf2.len());
+
+            c
+                .bench_function(&myfmt("bench_bbf_commit"),
+                    move |b| b.iter(|| bbf.commit(&val_bbf2)))
+                .bench_function(&myfmt("bench_yinyan_commit"),
+                    move |b| b.iter(|| yy.commit(&val_yy2)));
+        }
+
+        vc_bbf.commit(&val_bbf);
+        vc_yy.commit(&val_yy);
+
+        let I:Vec<usize> = (0..opn_sz).collect();
+        let bbf_opn_vals:Vec<bool> = I.iter().map(|i| val_bbf[*i].clone()).collect();
+        let yy_opn_vals:Vec<Vec<bool>> = I.iter().map(|i| val_yy[*i].clone()).collect();
+
+
+        // Run Open benchmarks
+        {
+            let bbf_opn_vals2 = bbf_opn_vals.clone();
+            let yy_opn_vals2 = yy_opn_vals.clone();
+            let I2_bbf = I.clone();
+            let I2_yy = I.clone();
+
+            let (mut bbf, mut yy) = (vc_bbf.clone(), vc_yy.clone());
+            c
+                .bench_function(&myfmt("bench_bbf_batch_open"),
+                    move |b| b.iter(|| bbf.batch_open(&bbf_opn_vals2, &I2_bbf) ))
+                .bench_function(&myfmt("bench_yinyan_batch_open"),
+                    move |b| b.iter(|| yy.batch_open(&yy_opn_vals2, &I2_yy.clone()) ));
+        }
+
+        let pi_bbf = vc_bbf.batch_open(&bbf_opn_vals, &I);
+        let pi_yy = vc_yy.batch_open(&yy_opn_vals, &I);
+
+        /*
+        // Verify
+        {
+            let (bbf, yy) = (vc_bbf.clone(), vc_yy.clone());
+            c
+                .bench_function(&myfmt("bench_bbf_verify"),
+                    move |b| b.iter(|| bbf.verify(&FIXED_V, FIXED_IDX, &pi_bbf) ))
+                .bench_function(&myfmt("bench_yy_verify"),
+                    move |b| b.iter(|| yy.batch_verify_bits(0, &bbf_opn_vals, &bbf_opn_I, &pi_yy) ));
+        }
+        */
+
+    }
+
+    fn bench_commit_non_pre(c: &mut Criterion) {
+        // m_opn: opening size
+        //let m_opn = 10;
+        //let m_opn = 16;
+        //let params = vec! [ (16, 32, 4) ]; // (chunk_sz, n_chunks, opn_sz)
+        for (i,param) in NON_PRE_PARAMS.iter().enumerate() {
+            bench_commit_non_pre_impl(c, i, param.0, param.1);
         }
 
     }
@@ -178,7 +274,7 @@ mod vc_benches {
         name = vc_benches;
         config = Criterion::default().sample_size(N_ITERS);
         targets =
-            bench_bbf_commit,
+            bench_commit_pre, bench_commit_non_pre
     }
 
 }
