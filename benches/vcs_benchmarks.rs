@@ -99,6 +99,7 @@ mod vc_benches {
     }
 
 
+    // XXX: I do not think we need both bbf and yy here. The latter alone should be fine.
     fn bench_commit_pre_impl(c: &mut Criterion, tag:usize, chunk_sz:usize, n_chunks:usize, opn_sz:usize)
     {
         let sz = n_chunks * chunk_sz;

@@ -406,7 +406,52 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             pfs
     }
 
+    fn batch_open_bits(&self, pos_in_word:usize, b: &Vec<bool>, I: &[usize]) -> ProofBit {
+        debug_assert!(b.len() == I.len());
 
+        //let prf_zero:ProofBit;
+        //let prf_one:ProofBit;
+
+        let acc = &self.accs[pos_in_word];
+
+
+        let ones = b
+            .iter()
+            .enumerate()
+            .filter(|(_, b_j)| **b_j)
+            .map(|(j, _)| j);
+
+        let zeros = b
+            .iter()
+            .enumerate()
+            .filter(|(_, b_j)| !*b_j)
+            .map(|(j, _)| j);
+
+        let mut p_ones = BigUint::one();
+        for j in ones {
+            p_ones *= self.hash.get(I[j]);
+        }
+
+        // XXX: Something is wrong here
+        let prf_one:ProofBit = if p_ones.is_one() {
+            (BigUint::zero(), BigUint::zero())
+        } else {
+            acc.1.mem_wit_create_star(&p_ones)
+        };
+
+        let mut p_zeros = BigUint::one();
+        for j in zeros {
+            p_zeros *= self.hash.get(I[j]);
+        }
+
+        let prf_zero:ProofBit = if p_zeros.is_one() {
+            (BigUint::zero(), BigUint::zero())
+        } else {
+            acc.0.mem_wit_create_star(&p_zeros)
+        };
+
+        (prf_zero, prf_one)
+    }
 
     fn batch_verify_bits(&self,
         pos_in_word:usize, bits: &Vec<bool>, I: &[usize],
@@ -589,7 +634,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn batch_open(&self, ws: &[Self::Domain], I: &[usize]) -> Self::BatchProof {
-        unimplemented!();
+        let prfs:BatchProof = vec![];
+        for i in 0..self.k {
+            let bs_i = ws.iter().map(|v| v[i]).collect();
+            let pi = self.batch_open_bits(i, &bs_i, I);
+            prfs.push(pi.clone());
+        }
     }
 
     fn batch_verify(&self, ws: &[Self::Domain], I: &[usize], pi: &Self::BatchProof) -> bool {
