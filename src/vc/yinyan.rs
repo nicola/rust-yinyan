@@ -72,11 +72,32 @@ use crate::accumulator::PrimeHash;
 //     }
 // }
 
+// Witness + PoE
+#[derive(Debug, Clone)]
+pub struct WitPoE
+{
+    pub wit: BigUint,
+    pub poe: BigUint,
+}
+
+impl WitPoE {
+    pub fn from_pair(p:&(BigUint, BigUint)) -> WitPoE
+    {
+        WitPoE { wit: p.0.clone(), poe: p.1.clone() }
+    }
+
+    pub fn to_pair(&self) -> (BigUint, BigUint)
+    {
+        (self.wit.clone(), self.poe.clone())
+    }
+}
 
 type ProofBit = (BigUint, BigUint);
 type Proof = Vec<ProofBit>; // proof for word
-type BatchProofBit = ProofBit;
-type BatchProof = Proof;
+
+type BatchProofBit = (WitPoE, WitPoE);
+type BatchProof = Vec<BatchProofBit>;
+
 type Domain = Vec<bool>;
 
 
@@ -109,7 +130,6 @@ fn partitioned_prime_prod_primes(vs:&Vec<bool>, pI:&[BigUint] ) -> (BigUint, Big
 fn all_primes(ph:&PrimeHash, n:usize) -> Vec<BigUint> {
     (0..n).map( |i| ph.get(i) ).collect()
 }
-
 
 
 
@@ -276,7 +296,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     }
 
     // I contains chunk indices
-    pub fn batch_open_from_precomp(&self, chunks:&Vec<Vec<bool>>, I:&[usize]) -> BatchProof
+    pub fn batch_open_from_precomp(&self, chunks:&Vec<Vec<bool>>, I:&[usize]) -> Vec<(BigUint, BigUint)>
     {
         // XXX: Supporting only k=1 for now
         assert_eq!(self.k, 1);
@@ -285,7 +305,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         let m:usize = I.len();
 
         // vector of all proofs
-        let prfs:Vec<BatchProofBit> = I.iter().map(
+        let prfs:Vec<(BigUint, BigUint)> = I.iter().map(
             |i| self.open_from_precomp(*i)[0].clone()
         ).collect();
         //let prods = I.iter().map(|i| self.prd_precomp[*i]).collect();
@@ -296,7 +316,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         vec![rslt_for_bit]
     }
 
-    fn aggregate_many_proofs_bit_helper(&self, prfs:&Vec<BatchProofBit>, part_prods:&Vec<(BigUint, BigUint)>) -> BatchProofBit
+    fn aggregate_many_proofs_bit_helper(&self, prfs:&Vec<(BigUint, BigUint)>, part_prods:&Vec<(BigUint, BigUint)>) -> (BigUint, BigUint)
     {
         let m:usize = prfs.len();
 
@@ -308,7 +328,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
         let m_prime = m.div_floor(&2);
 
-        let mut new_prfs:Vec<BatchProofBit> = Vec::with_capacity(m_prime);
+        let mut new_prfs:Vec<(BigUint, BigUint)> = Vec::with_capacity(m_prime);
         let mut new_part_prods:Vec<(BigUint, BigUint)> = Vec::with_capacity(m_prime);
 
 
@@ -332,7 +352,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         self.aggregate_many_proofs_bit_helper(&new_prfs, &new_part_prods)
     }
 
-    fn aggregate_many_proofs_bit(&self, prfs:&Vec<BatchProofBit>, chunks:&Vec<Vec<bool>>, I:&[usize]) -> BatchProofBit
+    fn aggregate_many_proofs_bit(&self, prfs:&Vec<(BigUint, BigUint)>, chunks:&Vec<Vec<bool>>, I:&[usize]) -> (BigUint, BigUint)
     {
         // we aggregate by chunk here
         // I is the subset of chunks we are opening
@@ -352,9 +372,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     // This version is not for generic words but only for case k = 1 for now
     fn aggregate_proofs_bit(
         &self,
-        pf1:&BatchProofBit, vals1:&Vec<bool>, I1:&[usize],
-        pf2:&BatchProofBit, vals2:&Vec<bool>, I2:&[usize]
-    ) -> BatchProofBit {
+        pf1:&(BigUint, BigUint), vals1:&Vec<bool>, I1:&[usize],
+        pf2:&(BigUint, BigUint), vals2:&Vec<bool>, I2:&[usize]
+    ) -> (BigUint, BigUint) {
             self.aggregate_proofs_bit_primes(
                 pf1, vals1, &to_primes(&self.hash, &I1.to_vec()), pf2, vals2, &to_primes(&self.hash, &I2.to_vec()))
     }
@@ -362,9 +382,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     // This version is not for generic words but only for case k = 1 for now
     fn aggregate_proofs_bit_primes(
         &self,
-        pf1:&BatchProofBit, vals1:&Vec<bool>, pI1:&[BigUint],
-        pf2:&BatchProofBit, vals2:&Vec<bool>, pI2:&[BigUint]
-    ) -> BatchProofBit {
+        pf1:&(BigUint, BigUint), vals1:&Vec<bool>, pI1:&[BigUint],
+        pf2:&(BigUint, BigUint), vals2:&Vec<bool>, pI2:&[BigUint]
+    ) -> (BigUint, BigUint) {
 
         // NB: We assume pI1 and pI2 are disjoint
         let pp1 = partitioned_prime_prod_primes(vals1, pI1);
@@ -376,9 +396,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     // This version is not for generic words but only for case k = 1 for now
     fn aggregate_proofs_bit_part_prod(
         &self,
-        pf1:&BatchProofBit, part_prod1:(BigUint, BigUint),
-        pf2:&BatchProofBit, part_prod2:(BigUint, BigUint)
-    ) -> BatchProofBit {
+        pf1:&(BigUint, BigUint), part_prod1:(BigUint, BigUint),
+        pf2:&(BigUint, BigUint), part_prod2:(BigUint, BigUint)
+    ) -> (BigUint, BigUint) {
         // NB: We assume pI1 and pI2 are disjoint
         let (a1, b1) = part_prod1;
         let (a2, b2) = part_prod2;
@@ -391,10 +411,10 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
     fn aggregate_proofs(
         &self,
-        pf1:&BatchProof, vals1:&[Domain], I1:&[usize],
-        pf2:&BatchProof, vals2:&[Domain], I2:&[usize]
-    ) -> BatchProof {
-            let mut pfs:BatchProof = vec![];
+        pf1:&Vec<(BigUint, BigUint)>, vals1:&[Domain], I1:&[usize],
+        pf2:&Vec<(BigUint, BigUint)>, vals2:&[Domain], I2:&[usize]
+    ) -> Vec<(BigUint, BigUint)> {
+            let mut pfs:Vec<(BigUint, BigUint)> = vec![];
             for i in 0..self.k {
                 let vals1_i = vals1.iter().map(|v| v[i]).collect();
                 let vals2_i = vals2.iter().map(|v| v[i]).collect();
@@ -406,15 +426,47 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             pfs
     }
 
-    fn batch_open_bits(&self, pos_in_word:usize, b: &Vec<bool>, I: &[usize]) -> ProofBit {
-        debug_assert!(b.len() == I.len());
 
+
+    fn batch_open_bits(&self, pos_in_word:usize, b: &Vec<bool>, I: &[usize]) -> BatchProofBit {
+        debug_assert!(b.len() == I.len());
         //let prf_zero:ProofBit;
         //let prf_one:ProofBit;
 
         let acc = &self.accs[pos_in_word];
 
+        let ones = b
+            .iter()
+            .enumerate()
+            .filter(|(_, b_j)| **b_j)
+            .map(|(j, _)| j);
 
+        let zeros = b
+            .iter()
+            .enumerate()
+            .filter(|(_, b_j)| !*b_j)
+            .map(|(j, _)| j);
+
+        let mk_prf_bit_fn = |vs, a:&A| {
+
+            // make product
+            let mut prd = BigUint::one();
+            for j in vs {
+                prd *= self.hash.get(I[j]);
+            }
+            let raw_prf_bit = if prd.is_one() {
+                (BigUint::zero(), BigUint::zero())
+            } else {
+                a.mem_wit_create_star(&prd)
+            };
+            WitPoE::from_pair(&raw_prf_bit)
+        };
+
+        // XXX: Just revert to the ugly code
+
+        let prf_one = mk_prf_bit_fn(ones, &acc.1);
+        let prf_zero = mk_prf_bit_fn(zeros, &acc.0);
+/*
         let ones = b
             .iter()
             .enumerate()
@@ -433,7 +485,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         }
 
         // XXX: Something is wrong here
-        let prf_one:ProofBit = if p_ones.is_one() {
+        let prf_one = if p_ones.is_one() {
             (BigUint::zero(), BigUint::zero())
         } else {
             acc.1.mem_wit_create_star(&p_ones)
@@ -444,23 +496,71 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             p_zeros *= self.hash.get(I[j]);
         }
 
-        let prf_zero:ProofBit = if p_zeros.is_one() {
-            (BigUint::zero(), BigUint::zero())
+        let prf_zero:BigUint = if p_zeros.is_one() {
+            BigUint::zero()
         } else {
             acc.0.mem_wit_create_star(&p_zeros)
         };
+        */
 
         (prf_zero, prf_one)
     }
 
     fn batch_verify_bits(&self,
-        pos_in_word:usize, bits: &Vec<bool>, I: &[usize],
+        pos_in_word:usize, b: &Vec<bool>, I: &[usize],
         pi: &BatchProofBit) -> bool {
+
+            let acc = self.accs[pos_in_word];
+
+            let check_prf_bit_fn = |tstbit, a:&A, prf| {
+                let vs = if tstbit {
+                    b.iter()
+                    .enumerate()
+                    .filter(|(_, b_j)| **b_j)
+                    .map(|(j, _)| j)
+                } else {
+                    b.iter()
+                    .enumerate()
+                    .filter(|(_, b_j)| !*b_j)
+                    .map(|(j, _)| j)
+                };
+                // make product
+                let mut prd = BigUint::one();
+                for j in vs {
+                    prd *= self.hash.get(I[j]);
+                }
+                !prd.is_one() && !a.ver_mem_star(&prd, prf)
+            };
+
+            let fail_one = check_prf_bit_fn(true, &acc.1, &pi.1.to_pair());
+            let fail_zero = check_prf_bit_fn(false, &acc.0, &pi.0.to_pair());
+
+            !fail_one && !fail_zero
+/*
+            let ones = b
+                .iter()
+                .enumerate()
+                .filter(|(_, b_j)| **b_j)
+                .map(|(j, _)| j);
+
+            let mut p_ones = BigUint::one();
+            for j in ones {
+                p_ones *= self.hash.get(i[j]);
+            }
+
+            if !p_ones.is_one() && !self.acc.ver_mem_star(&p_ones, &pi.0) {
+                return false;
+            }
+            */
+
+        // Old implementation: Temporarily not to be thrown away
+        /*
         let (p0, p1) = partitioned_prime_prod(&self.hash, bits, I);
         let (pf0, pf1) = pi;
         let acc = &self.accs[pos_in_word];
         let rslt = acc.1.ver_mem(pf1, &p1) && acc.0.ver_mem(pf0, &p0);
         rslt
+        */
     }
 }
 
@@ -640,6 +740,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             let pi = self.batch_open_bits(i, &bs_i, I);
             prfs.push(pi.clone());
         }
+        prfs
     }
 
     fn batch_verify(&self, ws: &[Self::Domain], I: &[usize], pi: &Self::BatchProof) -> bool {
@@ -822,7 +923,7 @@ mod tests {
                 &pf0, &[vec![avec[0]]], &[0],
                 &pf1, &[vec![avec[1]]], &[1] );
         let agg_vals = &[liftb(&avec[0]), liftb(&avec[1])];
-        assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
+        //assert!(vc.batch_verify(agg_vals, &[0,1], &pf_agg));
 
     }
 
