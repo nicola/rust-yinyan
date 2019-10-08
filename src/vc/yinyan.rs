@@ -434,7 +434,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         //let prf_one:ProofBit;
 
         let acc = &self.accs[pos_in_word];
-
         let ones = b
             .iter()
             .enumerate()
@@ -447,13 +446,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             .filter(|(_, b_j)| !*b_j)
             .map(|(j, _)| j);
 
-        let mk_prf_bit_fn = |vs, a:&A| {
+        // make product
+        let mut prd1 = BigUint::one();
+        for j in ones {
+            prd1 *= self.hash.get(I[j]);
+        }
 
-            // make product
-            let mut prd = BigUint::one();
-            for j in vs {
-                prd *= self.hash.get(I[j]);
-            }
+        let mut prd0 = BigUint::one();
+        for j in zeros {
+            prd0 *= self.hash.get(I[j]);
+        }
+
+
+        let mk_prf_bit_fn = |prd:BigUint, a:&A| {
             let raw_prf_bit = if prd.is_one() {
                 (BigUint::zero(), BigUint::zero())
             } else {
@@ -462,46 +467,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
             WitPoE::from_pair(&raw_prf_bit)
         };
 
-        // XXX: Just revert to the ugly code
 
-        let prf_one = mk_prf_bit_fn(ones, &acc.1);
-        let prf_zero = mk_prf_bit_fn(zeros, &acc.0);
-/*
-        let ones = b
-            .iter()
-            .enumerate()
-            .filter(|(_, b_j)| **b_j)
-            .map(|(j, _)| j);
-
-        let zeros = b
-            .iter()
-            .enumerate()
-            .filter(|(_, b_j)| !*b_j)
-            .map(|(j, _)| j);
-
-        let mut p_ones = BigUint::one();
-        for j in ones {
-            p_ones *= self.hash.get(I[j]);
-        }
-
-        // XXX: Something is wrong here
-        let prf_one = if p_ones.is_one() {
-            (BigUint::zero(), BigUint::zero())
-        } else {
-            acc.1.mem_wit_create_star(&p_ones)
-        };
-
-        let mut p_zeros = BigUint::one();
-        for j in zeros {
-            p_zeros *= self.hash.get(I[j]);
-        }
-
-        let prf_zero:BigUint = if p_zeros.is_one() {
-            BigUint::zero()
-        } else {
-            acc.0.mem_wit_create_star(&p_zeros)
-        };
-        */
+        let prf_one = mk_prf_bit_fn(prd1, &acc.1);
+        let prf_zero = mk_prf_bit_fn(prd0, &acc.0);
 
         (prf_zero, prf_one)
     }
@@ -510,30 +478,37 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         pos_in_word:usize, b: &Vec<bool>, I: &[usize],
         pi: &BatchProofBit) -> bool {
 
-            let acc = self.accs[pos_in_word];
+            let acc = &self.accs[pos_in_word];
 
-            let check_prf_bit_fn = |tstbit, a:&A, prf| {
-                let vs = if tstbit {
-                    b.iter()
-                    .enumerate()
-                    .filter(|(_, b_j)| **b_j)
-                    .map(|(j, _)| j)
-                } else {
-                    b.iter()
-                    .enumerate()
-                    .filter(|(_, b_j)| !*b_j)
-                    .map(|(j, _)| j)
-                };
-                // make product
-                let mut prd = BigUint::one();
-                for j in vs {
-                    prd *= self.hash.get(I[j]);
-                }
+            let ones = b
+                .iter()
+                .enumerate()
+                .filter(|(_, b_j)| **b_j)
+                .map(|(j, _)| j);
+
+            let zeros = b
+                .iter()
+                .enumerate()
+                .filter(|(_, b_j)| !*b_j)
+                .map(|(j, _)| j);
+
+            // make product
+            let mut prd1 = BigUint::one();
+            for j in ones {
+                prd1 *= self.hash.get(I[j]);
+            }
+
+            let mut prd0 = BigUint::one();
+            for j in zeros {
+                prd0 *= self.hash.get(I[j]);
+            }
+
+            let check_prf_bit_fn = |prd:BigUint, a:&A, prf:&(BigUint, BigUint)| {
                 !prd.is_one() && !a.ver_mem_star(&prd, prf)
             };
 
-            let fail_one = check_prf_bit_fn(true, &acc.1, &pi.1.to_pair());
-            let fail_zero = check_prf_bit_fn(false, &acc.0, &pi.0.to_pair());
+            let fail_one = check_prf_bit_fn(prd1, &acc.1, &pi.1.to_pair());
+            let fail_zero = check_prf_bit_fn(prd0, &acc.0, &pi.0.to_pair());
 
             !fail_one && !fail_zero
 /*
@@ -734,7 +709,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
     }
 
     fn batch_open(&self, ws: &[Self::Domain], I: &[usize]) -> Self::BatchProof {
-        let prfs:BatchProof = vec![];
+        let mut prfs:BatchProof = vec![];
         for i in 0..self.k {
             let bs_i = ws.iter().map(|v| v[i]).collect();
             let pi = self.batch_open_bits(i, &bs_i, I);
