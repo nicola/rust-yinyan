@@ -106,7 +106,7 @@ mod vc_benches {
         let mut rng = ChaChaRng::from_seed(SEED);
 
         let myfmt = |s| -> String {
-            format!("{}_CHKSZ={}_N_CHKS={}_OPNSZ={}", s, chunk_sz, n_chunks, opn_sz)
+            format!("PRE_{}_CHKSZ={}_N_CHKS={}_OPNSZ={}", s, chunk_sz, n_chunks, opn_sz)
         };
 
         let ph = Rc::new(PrimeHash::init(sz));
@@ -192,7 +192,7 @@ mod vc_benches {
         let chunk_sz = 1; // we do not use this anyway
 
         let myfmt = |s| -> String {
-            format!("{}_VECSZ={}_OPNSZ={}", s, sz, opn_sz)
+            format!("NON_PRE_{}_VECSZ={}_OPNSZ={}", s, sz, opn_sz)
         };
 
         let ph = Rc::new(PrimeHash::init(sz));
@@ -246,17 +246,20 @@ mod vc_benches {
         let pi_bbf = vc_bbf.batch_open(&bbf_opn_vals, &I);
         let pi_yy = vc_yy.batch_open(&yy_opn_vals, &I);
 
-        /*
+
         // Verify
         {
+            let I2_bbf = I.clone();
+            let I2_yy = I.clone();
+
             let (bbf, yy) = (vc_bbf.clone(), vc_yy.clone());
             c
                 .bench_function(&myfmt("bench_bbf_verify"),
-                    move |b| b.iter(|| bbf.verify(&FIXED_V, FIXED_IDX, &pi_bbf) ))
+                    move |b| b.iter(|| bbf.batch_verify(&bbf_opn_vals, &I2_bbf, &pi_bbf) ))
                 .bench_function(&myfmt("bench_yy_verify"),
-                    move |b| b.iter(|| yy.batch_verify_bits(0, &bbf_opn_vals, &bbf_opn_I, &pi_yy) ));
+                    move |b| b.iter(|| yy.batch_verify(&yy_opn_vals, &I2_yy, &pi_yy) ));
         }
-        */
+
 
     }
 
@@ -275,7 +278,7 @@ mod vc_benches {
         name = vc_benches;
         config = Criterion::default().sample_size(N_ITERS);
         targets =
-            bench_commit_pre, bench_commit_non_pre
+            /* bench_commit_pre, */ bench_commit_non_pre
     }
 
 }
