@@ -77,14 +77,14 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
     }
 
     fn commit(&mut self, m: &[Self::Domain]) -> Self::Commitment {
-        self.pos = 0;
+        //self.pos = 0;
         //println!("Committing to vec of size {}", m.len() );
         //m.iter().enumerate().for_each(|(i,x)| {println!("({}, {})", i, x);} );
         let primes = m
             .iter()
             .enumerate()
             .filter(|(_, &m_i)| m_i)
-            .map(|(i, _)| {let x = self.pos + i; /*println!("Getting pos #{}", x); */  self.hash.get(x) })
+            .map(|(i, _)| { self.hash.get(i) })
             .collect::<Vec<_>>();
 
         self.pos = m.len();
