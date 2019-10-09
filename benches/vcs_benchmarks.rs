@@ -52,7 +52,7 @@ mod vc_benches {
     //const N_CHUNKS:usize = 32;
     //const SZ:usize = CHUNK_SZ*N_CHUNKS;
 
-    const N_ITERS:usize = 2; // Set appropriately
+    const N_ITERS:usize = 3; // Set appropriately
 
     const SEED:[u8;32] = [1u8;32];
 

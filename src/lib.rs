@@ -1,6 +1,7 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 #![allow(clippy::unreadable_literal, clippy::many_single_char_names)]
 #![warn(clippy::type_complexity, clippy::too_many_arguments)]
+#![feature(type_ascription)]
 
 #[cfg(feature = "serde")]
 #[macro_use]

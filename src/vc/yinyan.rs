@@ -618,7 +618,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                 debug_assert!(g_j == acc.1.g());
                 let (A_j, a_j) = (acc.0.state(), acc.0.set());
                 let (B_j, b_j) = (acc.1.state(), acc.1.set());
-                proofs::ni_poprod_prove(
+                let pi =
+                    proofs::ni_poprod_prove(
                     g,
                     g_j,
                     A_j,
@@ -627,7 +628,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
                     b_j,
                     u,
                     &self.modulus,
-                )
+                );
+                pi
             })
             .collect();
 

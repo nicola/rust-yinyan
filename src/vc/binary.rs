@@ -80,16 +80,25 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         //self.pos = 0;
         //println!("Committing to vec of size {}", m.len() );
         //m.iter().enumerate().for_each(|(i,x)| {println!("({}, {})", i, x);} );
-        let primes = m
+
+
+        /*let primes = m
             .iter()
             .enumerate()
             .filter(|(_, &m_i)| m_i)
             .map(|(i, _)| { self.hash.get(i) })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>(); */
 
         self.pos = m.len();
         self.acc = self.acc.cleared(); // XXX: Reset everything
-        self.acc.batch_add(&primes);
+
+        for (i, bit) in m.iter().enumerate() {
+            let prime = self.hash.get(i);
+            if *bit {
+                // B_j
+                self.acc.add(&prime);
+            }
+        }
 
         self.acc.state().clone()
     }
