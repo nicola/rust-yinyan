@@ -20,6 +20,8 @@ blake2 = "0.8.0"
 generic-array = "0.12.0"
 byteorder = "1.2.7"
 bitvec = "0.9.0"
+rand_chacha = "0.1"
+
 
 [dependencies.serde]
 optional = true
@@ -46,8 +48,14 @@ rand_chacha = "0.1"
 name = "vcs_benchmarks"
 harness = false
 
+[profile.release]
+debug = true
+
 
 [features]
 default = ["rsa_group"]
 class_group = ["serde", "classygroup"]
 rsa_group = []
+
+[[bin]]
+name = "commit_yy"

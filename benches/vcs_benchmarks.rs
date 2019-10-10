@@ -54,7 +54,7 @@ mod vc_benches {
 
     const N_ITERS:usize = 3; // Set appropriately
 
-    const SEED:[u8;32] = [1u8;32];
+    const SEED:[u8;32] = [2u8;32];
 
     fn flatten_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> (Vec<bool>, Vec<usize>)
     {
@@ -96,7 +96,8 @@ mod vc_benches {
         let mut vc_bbf =
             binary::BinaryVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_bbf);
 
-        let config_yy = yinyan::Config { lambda: L, k: K, n: N, precomp_l: chunk_sz, size: sz, ph: ph.clone() };
+        let config_yy = yinyan::Config { 
+            lambda: L, k: K, n: N, precomp_l: chunk_sz, size: sz, ph: ph.clone() };
         let mut vc_yy =
             yinyan::YinYanVectorCommitment::<A>::setup::<RSAGroup, _>(&mut rng, &config_yy);
 
@@ -194,7 +195,7 @@ mod vc_benches {
         //let sz = n_chunks * chunk_sz;
         let mut rng = ChaChaRng::from_seed(SEED);
 
-        let chunk_sz = 1; // we do not use this anyway
+        let chunk_sz = 0; // we do not use this anyway
 
         let myfmt = |s| -> String {
             format!("NON_PRE_{}_VECSZ={}_OPNSZ={}", s, sz, opn_sz)
@@ -221,10 +222,11 @@ mod vc_benches {
             c
                 .bench_function(&myfmt("bench_bbf_commit"),
                     move |b| b.iter(|| bbf.commit(&val_bbf2)))
-                .bench_function(&myfmt("bench_yinyan_commit"),
+                .bench_function(&myfmt("bench_yinyan_commit_simple"),
                     move |b| b.iter(|| yy.commit(&val_yy2)));
         }
 
+/*
         vc_bbf.commit(&val_bbf);
         vc_yy.commit(&val_yy);
 
@@ -264,7 +266,7 @@ mod vc_benches {
                 .bench_function(&myfmt("bench_yy_verify"),
                     move |b| b.iter(|| yy.batch_verify(&yy_opn_vals, &I2_yy, &pi_yy) ));
         }
-
+*/
 
     }
 

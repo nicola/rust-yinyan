@@ -106,7 +106,31 @@ pub struct Commitment {
     pub prods: Vec<proofs::PoprodProof>,
 }
 
+/*
+pub fn prove(
+    g: &BigUint,
+    h: &BigUint,
+    y1: &BigUint,
+    y2: &BigUint,
+    x1: &BigUint,
+    x2: &BigUint,
+    z: &BigUint,
+    n: &BigUint,
+)-> proofs::PoprodProof
+{
 
+    proofs::ni_poprod_prove(
+        acc0.g,
+        acc0.g,
+        &acc0,
+        &acc1,
+        prd0,
+        prd1,
+        prd0*prd1,
+        &acc0.n,
+    )
+    
+} */
 
 // produces two accumulators---one for the 0-vals; the other for the one-vals
 fn partitioned_prime_prod(ph: &PrimeHash, vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
@@ -153,7 +177,7 @@ pub struct YinYanVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccu
     k: usize,      // word size
     size: usize,   // max words in the vector
     uacc: A,
-    accs: Vec<(A, A)>, // lenght of accs must be k
+    pub accs: Vec<(A, A)>, // lenght of accs must be k
     _a: PhantomData<&'a A>,
     prod_proofs: Vec<proofs::PoprodProof>,
     modulus: BigUint,
@@ -176,6 +200,77 @@ pub struct Config {
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     YinYanVectorCommitment<'a, A>
 {
+
+        pub fn commit_simple(&mut self, m: &[bool]) -> Commitment {
+            // i = 0..m (m number of words)
+
+
+            self.accs[0].0 = self.accs[0].0.cleared();
+            self.accs[0].1 = self.accs[0].1.cleared();
+
+            let acc = &mut self.accs[0];
+
+            for (i, bit) in (&m).iter().enumerate() {
+                let prime = self.hash.get(i);
+
+                if *bit {
+                    // B_j
+                    acc.1.add(&prime);
+                }
+            }
+
+/*
+            for (i, bit) in (&m).iter().enumerate() {
+                let prime = self.hash.get(i);
+                if !(*bit) {
+                // A_j
+                    acc.0.add(&prime);
+                }
+            }
+*/
+
+
+            //let g = self.uacc.g();
+            //let (U_n, u) = (self.uacc.state(), self.uacc.set());
+
+
+/*
+            self.prod_proofs = self
+                .accs
+                .iter()
+                .map(|acc| {
+                    let g_j = acc.0.g();
+                    debug_assert!(g_j == acc.1.g());
+                    let (A_j, a_j) = (acc.0.state(), acc.0.set());
+                    let (B_j, b_j) = (acc.1.state(), acc.1.set());
+                    /* let pi =
+                        proofs::ni_poprod_prove(
+                        g,
+                        g_j,
+                        A_j,
+                        &((B_j * U_n) % &self.modulus),
+                        a_j,
+                        b_j,
+                        u,
+                        &self.modulus,
+                    );*/
+                    let pi = (BigUint::one(), BigUint::one(), BigUint::one(), BigUint::one()) as proofs::PoprodProof;
+                    pi
+
+                })
+                .collect();
+                */
+                let pi = (BigUint::one(), BigUint::one(), BigUint::one(), BigUint::one()) as proofs::PoprodProof;
+
+                self.prod_proofs = vec![pi];
+
+            Commitment {
+                states: vec![(self.accs[0].0.state().clone(), self.accs[0].1.state().clone())],
+                prods: self.prod_proofs.clone(),
+            }
+        }
+
+
     pub fn reset(&mut self) {
         self.accs = self
             .accs
@@ -539,6 +634,8 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
     }
 }
 
+
+
 impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVectorCommitment<'a>
     for YinYanVectorCommitment<'a, A>
 {
@@ -554,9 +651,12 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
         G: PrimeGroup,
         R: CryptoRng + Rng,
     {
-        let (modulus, _) = G::generate_primes(rng, config.n).unwrap();
+        let (modulus, g) = G::generate_primes(rng, config.n).unwrap();
+
 
         let two = BigUint::from_u64(2 as u64).unwrap();
+
+        let precomp_N = if config.precomp_l !=0 {config.size/config.precomp_l} else {0};
 
         YinYanVectorCommitment {
             lambda: config.lambda,
@@ -567,18 +667,19 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts> StaticVe
             uacc: A::from_parts(modulus.clone(), rng.gen_biguint(config.n)),
             accs: (0..config.k)
                 .map(|_| {
-                    let tmp = rng.gen_biguint(config.n);
-                    let g = tmp.modpow(&two, &modulus);
+                    let r0 = rng.gen_biguint(config.n);
+                    let r1 = rng.gen_biguint(config.n);
+                    //let   g = tmp.modpow(&two, &modulus);
                     (
-                        A::from_parts(modulus.clone(), g.clone()),
-                        A::from_parts(modulus.clone(), g),
+                        A::from_parts(modulus.clone(), g.modpow(&r0, &modulus)),
+                        A::from_parts(modulus.clone(), g.modpow(&r1, &modulus)),
                     )
                 })
                 .collect(),
             _a: PhantomData,
             precomp_l: config.precomp_l,
-            precomp_N: config.size/config.precomp_l,
-            pi_precomp: Vec::with_capacity( config.size/config.precomp_l), // size is precomp_N
+            precomp_N: precomp_N,
+            pi_precomp: Vec::with_capacity( precomp_N ), // size is precomp_N
             hash: Rc::clone(&config.ph),
         }
     }

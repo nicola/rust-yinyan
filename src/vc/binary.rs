@@ -16,7 +16,7 @@ use crate::accumulator::PrimeHash;
 pub struct BinaryVectorCommitment<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> {
     lambda: usize,
     n: usize,
-    acc: A,
+    pub acc: A,
     pos: usize,
     _a: PhantomData<&'a A>,
     hash: Rc<PrimeHash>,
@@ -69,7 +69,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
         BinaryVectorCommitment {
             lambda: config.lambda,
             n: config.n,
-            acc: A::setup::<G, _>(rng, config.lambda),
+            acc: A::setup::<G, _>(rng, config.n),
             pos: 0,
             _a: PhantomData,
             hash: Rc::clone(&config.ph),
@@ -89,10 +89,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator> StaticVectorCommitme
             .map(|(i, _)| { self.hash.get(i) })
             .collect::<Vec<_>>(); */
 
-        self.pos = m.len();
         self.acc = self.acc.cleared(); // XXX: Reset everything
 
-        for (i, bit) in m.iter().enumerate() {
+        for (i, bit) in (&m).iter().enumerate() {
             let prime = self.hash.get(i);
             if *bit {
                 // B_j
