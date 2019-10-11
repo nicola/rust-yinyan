@@ -202,7 +202,6 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 {
 
         pub fn commit_simple(&mut self, m: &[bool]) -> Commitment {
-            // i = 0..m (m number of words)
 
 
             self.accs[0].0 = self.accs[0].0.cleared();
@@ -219,7 +218,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                 }
             }
 
-/*
+
             for (i, bit) in (&m).iter().enumerate() {
                 let prime = self.hash.get(i);
                 if !(*bit) {
@@ -227,14 +226,14 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                     acc.0.add(&prime);
                 }
             }
-*/
 
 
-            //let g = self.uacc.g();
-            //let (U_n, u) = (self.uacc.state(), self.uacc.set());
+
+            let g = self.uacc.g();
+            let (U_n, u) = (self.uacc.state(), self.uacc.set());
 
 
-/*
+
             self.prod_proofs = self
                 .accs
                 .iter()
@@ -243,7 +242,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                     debug_assert!(g_j == acc.1.g());
                     let (A_j, a_j) = (acc.0.state(), acc.0.set());
                     let (B_j, b_j) = (acc.1.state(), acc.1.set());
-                    /* let pi =
+                     let pi =
                         proofs::ni_poprod_prove(
                         g,
                         g_j,
@@ -253,13 +252,13 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
                         b_j,
                         u,
                         &self.modulus,
-                    );*/
+                    );
                     let pi = (BigUint::one(), BigUint::one(), BigUint::one(), BigUint::one()) as proofs::PoprodProof;
                     pi
 
                 })
                 .collect();
-                */
+                
                 let pi = (BigUint::one(), BigUint::one(), BigUint::one(), BigUint::one()) as proofs::PoprodProof;
 
                 self.prod_proofs = vec![pi];
@@ -523,7 +522,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
 
 
-    fn batch_open_bits(&self, pos_in_word:usize, b: &Vec<bool>, I: &[usize]) -> BatchProofBit {
+    pub fn batch_open_bits(&self, pos_in_word:usize, b: &Vec<bool>, I: &[usize]) -> BatchProofBit {
         debug_assert!(b.len() == I.len());
         //let prf_zero:ProofBit;
         //let prf_one:ProofBit;
@@ -569,7 +568,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         (prf_zero, prf_one)
     }
 
-    fn batch_verify_bits(&self,
+    pub fn batch_verify_bits(&self,
         pos_in_word:usize, b: &Vec<bool>, I: &[usize],
         pi: &BatchProofBit) -> bool {
 

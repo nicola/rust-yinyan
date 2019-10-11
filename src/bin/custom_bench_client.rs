@@ -40,22 +40,31 @@ use std::time::{Duration, Instant};
 
 struct ATimer {
     time: Instant,
-    curDelta: Duration
+    curDelta: Duration,
+    T: u32,
 }
 
 impl ATimer {
-    fn init() -> ATimer { ATimer {time: Instant::now(), curDelta: Instant::now().elapsed() } }
+    fn init(T:u32) -> ATimer {
+         ATimer {time: Instant::now(), curDelta: Duration::new(0,0), T: T } 
+         }
     fn start(&mut self) { self.time = Instant::now(); }
     fn stop(&mut self) { self.curDelta = self.time.elapsed(); }
     fn print(&self, msg:String) { println!("[Timing] {}: {:?}", msg, self.curDelta);} 
 
-    fn bm<T>(&mut self, f: &Fn() -> T, msg:String) -> T {
-        self.start();
-        //let com = vc_bbf.commit(&vals);
-        let ret = f();
-        self.stop();
-        self.print(msg);
-        ret
+    fn bm<U>(&mut self, f: &mut FnMut() -> U, msg:String) -> U {
+        
+        let mut d = Duration::new(0,0);
+
+        for i in 0..self.T {
+            self.start();
+            let ret = f();
+            self.stop();
+            d = d + self.curDelta;
+        }
+        d = d/self.T;
+        println!("[Timing] {}: {:?}", msg, d);
+        f()
     }
 
 }
@@ -91,11 +100,15 @@ fn acc_zeros(m:&Vec<bool>, acc:&mut Accumulator, hash: &PrimeHash) -> BigUint {
 }
 
 fn commit_bbf(m:&Vec<bool>, acc:&mut Accumulator, hash: &PrimeHash) {
+    *acc = acc.cleared();
     acc_ones(m, acc, hash);
     //acc_ones(m, acc, hash);
 }
 
 fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &PrimeHash) {
+    *acc0 = acc0.cleared();
+    *acc1 = acc1.cleared();
+
     let prd1 =  acc_ones(m, acc1, hash);
     let prd0 = acc_zeros(m, acc0, hash);
 
@@ -116,28 +129,53 @@ fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &
 }
 
 
+static NON_PRE_PARAMS: &'static [(usize,usize)] = &[
+    (512, 64),
+    (1024, 128),
+    (2048, 256),
+    (4096, 512),
+    (8192, 1024),
+    (16384, 2048),
+    (32768, 4096),
+    (65536, 8192),
+    (131072, 16384)
+];
+
 
 fn main() {
 
     const N:usize = 2048; // modulus size
-    const L:usize = 128; // Not sure we are using it.
+    const L:usize = 128; // lambda
     const K:usize = 1;
 
     const SEED:[u8;32] = [2u8;32];
 
-    let sz = 4096;
+    const N_SAMPLES:u32 = 3;
+
+    //let sz = 512;
 
     let mut rng = ChaChaRng::from_seed(SEED);
-    let ph = Rc::new(PrimeHash::init(sz));
-    let mut timer = ATimer::init();
+    let mut timer = ATimer::init(N_SAMPLES);
+
+    // sz dependent code
+    for (i,(sz, opn_sz)) in NON_PRE_PARAMS.iter().enumerate()
+    {
+
+    let ph = Rc::new(PrimeHash::init(*sz));
+    
 
     // make data
-    let mut vals: Vec<bool> = (0..sz).map(|_| rng.gen()).collect();
+    let mut vals: Vec<bool> = (0..*sz).map(|_| rng.gen()).collect();
+    let I:Vec<usize> = (0..*opn_sz).collect();
+    let opn_vals:Vec<bool> = I.iter().map(|i| vals[*i].clone()).collect();
+
+    println!("-- SZ = {}; OPN_SZ =  {} --", sz, opn_sz);
+    println!("#YY");
 
     {
         // init VC
         let config_yy = yinyan::Config { 
-            lambda: L, k: K, n: N, precomp_l: 0, size: sz, ph: ph.clone() };
+            lambda: L, k: K, n: N, precomp_l: 0, size: *sz, ph: ph.clone() };
         let mut vc_yy =
             yinyan::YinYanVectorCommitment::<Accumulator>::
                 setup::<RSAGroup, _>(&mut rng, &config_yy);
@@ -145,16 +183,35 @@ fn main() {
         let mut acc0 = vc_yy.accs[0].0.clone();
         let mut acc1 = vc_yy.accs[0].1.clone();
 
-        println!("Our acc's size: {}", acc0.int_size_bits);
+        //println!("Our acc's size: {}", acc0.int_size_bits);
 
         // commit
-        timer.start();
-        //let com = vc_yy.commit_simple(&vals);
-        commit_yy(&vals, &mut acc0, &mut acc1, &ph);
-        timer.stop();
-        timer.print("Committing YY".to_string());
+        timer.bm(
+            &mut || { commit_yy(&vals, &mut acc0, &mut acc1, &ph) }, 
+            "Committing YY".to_string()
+        );
+
+        // prepare for opening
+        vc_yy.commit_simple(&vals); 
+
+
+        // batch opening 
+        timer.bm(
+            &mut || { vc_yy.batch_open_bits(0, &opn_vals, &I) }, 
+            "Opening YY".to_string()
+        );
+
+        // prepare for verification
+        let pi = vc_yy.batch_open_bits(0, &opn_vals, &I);
+
+        // batch verify 
+        timer.bm(
+            &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
+            "Verify YY".to_string()
+        );
     }
 
+    println!("#BBF");
     {
         // init VC
         let config_bbf = binary::Config { lambda: L, n: N, ph: ph.clone() };
@@ -162,15 +219,33 @@ fn main() {
             binary::BinaryVectorCommitment::<Accumulator>::setup
                 ::<RSAGroup, _>(&mut rng, &config_bbf);
 
-        let acc = vc_bbf.acc.clone();
-        println!("BBF acc's size: {}", acc.int_size_bits);
-
-
+        let mut acc = vc_bbf.acc.clone();
+        
         // commit
-        timer.start();
-        let com = vc_bbf.commit(&vals);
-        timer.stop();
-        timer.print("Committing BBF".to_string());
+        timer.bm(
+            &mut || { commit_bbf(&vals, &mut acc, &ph) }, 
+            "Committing BBF".to_string()
+        );
+
+        // prepare for open
+        vc_bbf.commit(&vals); 
+       
+        // batch opening 
+        timer.bm(
+            &mut || { vc_bbf.batch_open(&opn_vals, &I) }, 
+            "Opening BBF".to_string()
+        );
+
+        // prepare for verification
+        let pi = vc_bbf.batch_open(&opn_vals, &I);
+
+        // batch verify 
+        timer.bm(
+            &mut || { vc_bbf.batch_verify(&opn_vals, &I, &pi) }, 
+            "Verify BBF".to_string()
+        );
+    }
+    println!("");
     }
 
 }

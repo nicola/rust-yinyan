@@ -222,11 +222,11 @@ mod vc_benches {
             c
                 .bench_function(&myfmt("bench_bbf_commit"),
                     move |b| b.iter(|| bbf.commit(&val_bbf2)))
-                .bench_function(&myfmt("bench_yinyan_commit_simple"),
+                .bench_function(&myfmt("bench_yinyan_commit"),
                     move |b| b.iter(|| yy.commit(&val_yy2)));
         }
 
-/*
+
         vc_bbf.commit(&val_bbf);
         vc_yy.commit(&val_yy);
 
@@ -266,7 +266,7 @@ mod vc_benches {
                 .bench_function(&myfmt("bench_yy_verify"),
                     move |b| b.iter(|| yy.batch_verify(&yy_opn_vals, &I2_yy, &pi_yy) ));
         }
-*/
+
 
     }
 

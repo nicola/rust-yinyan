@@ -58,4 +58,4 @@ class_group = ["serde", "classygroup"]
 rsa_group = []
 
 [[bin]]
-name = "commit_yy"
+name = "custom_bench_client"
