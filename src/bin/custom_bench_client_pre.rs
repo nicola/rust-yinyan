@@ -129,11 +129,17 @@ fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &
 }
 
 // syntax: chunk_size, n_chunks, opn_size (in chunks)
-static PRE_PARAMS: &'static [(usize, usize, usize)] = &[
+static PRE_PARAMS1: &'static [(usize, usize, usize)] = &[
     (256, 64, 16),
     (256, 128, 32),
     (256, 256, 64),
     (256, 512, 128),
+];
+
+static PRE_PARAMS2: &'static [(usize, usize, usize)] = &[
+    (256, 1024, 256),
+    (256, 2048, 512),
+    (256, 4096, 1024)
 ];
 
 fn main() {
@@ -152,7 +158,7 @@ fn main() {
     let mut timer = ATimer::init(N_SAMPLES);
 
     // sz dependent code
-    for (i,(chunk_sz, n_chunks, opn_sz)) in PRE_PARAMS.iter().enumerate()
+    for (i,(chunk_sz, n_chunks, opn_sz)) in PRE_PARAMS2.iter().enumerate()
     {
         let sz:usize = n_chunks * chunk_sz;
         let ph = Rc::new(PrimeHash::init(sz));
