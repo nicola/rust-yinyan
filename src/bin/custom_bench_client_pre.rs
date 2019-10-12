@@ -128,19 +128,13 @@ fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &
     );
 }
 
-
-static NON_PRE_PARAMS: &'static [(usize,usize)] = &[
-    (512, 64),
-    (1024, 128),
-    (2048, 256),
-    (4096, 512),
-    (8192, 1024),
-    (16384, 2048),
-    (32768, 4096),
-    (65536, 8192),
-    (131072, 16384)
+// syntax: chunk_size, n_chunks, opn_size (in chunks)
+static PRE_PARAMS: &'static [(usize, usize, usize)] = &[
+    (256, 64, 16),
+    (256, 128, 32),
+    (256, 256, 64),
+    (256, 512, 128),
 ];
-
 
 fn main() {
 
@@ -150,7 +144,7 @@ fn main() {
 
     const SEED:[u8;32] = [2u8;32];
 
-    const N_SAMPLES:u32 = 3;
+    const N_SAMPLES:u32 = 2;
 
     //let sz = 512;
 
@@ -158,93 +152,76 @@ fn main() {
     let mut timer = ATimer::init(N_SAMPLES);
 
     // sz dependent code
-    for (i,(sz, opn_sz)) in NON_PRE_PARAMS.iter().enumerate()
+    for (i,(chunk_sz, n_chunks, opn_sz)) in PRE_PARAMS.iter().enumerate()
     {
-
-    let ph = Rc::new(PrimeHash::init(*sz));
-    
-
-    // make data
-    let mut vals: Vec<bool> = (0..*sz).map(|_| rng.gen()).collect();
-    let I:Vec<usize> = (0..*opn_sz).collect();
-    let opn_vals:Vec<bool> = I.iter().map(|i| vals[*i].clone()).collect();
-
-    println!("-- SZ = {}; OPN_SZ =  {} --", sz, opn_sz);
-    println!("#YY");
-    {
-        // init VC
-        let config_yy = yinyan::Config { 
-            lambda: L, k: K, n: N, precomp_l: 0, size: *sz, ph: ph.clone() };
-        let mut vc_yy =
-            yinyan::YinYanVectorCommitment::<Accumulator>::
-                setup::<RSAGroup, _>(&mut rng, &config_yy);
-
-        let mut acc0 = vc_yy.accs[0].0.clone();
-        let mut acc1 = vc_yy.accs[0].1.clone();
-
-        //println!("Our acc's size: {}", acc0.int_size_bits);
-
-        // commit
-        timer.bm(
-            &mut || { commit_yy(&vals, &mut acc0, &mut acc1, &ph) }, 
-            "Committing YY".to_string()
-        );
-
-        // prepare for opening
-        vc_yy.commit_simple(&vals); 
-
-
-        // batch opening 
-        timer.bm(
-            &mut || { vc_yy.batch_open_bits(0, &opn_vals, &I) }, 
-            "Opening YY".to_string()
-        );
-
-        // prepare for verification
-        let pi = vc_yy.batch_open_bits(0, &opn_vals, &I);
-
-        // batch verify 
-        timer.bm(
-            &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
-            "Verify YY".to_string()
-        );
-    }
-
-    println!("#BBF");
-    {
-        // init VC
-        let config_bbf = binary::Config { lambda: L, n: N, ph: ph.clone() };
-        let mut vc_bbf =
-            binary::BinaryVectorCommitment::<Accumulator>::setup
-                ::<RSAGroup, _>(&mut rng, &config_bbf);
-
-        let mut acc = vc_bbf.acc.clone();
+        let sz:usize = n_chunks * chunk_sz;
+        let ph = Rc::new(PrimeHash::init(sz));
         
-        // commit
-        timer.bm(
-            &mut || { commit_bbf(&vals, &mut acc, &ph) }, 
-            "Committing BBF".to_string()
-        );
 
-        // prepare for open
-        vc_bbf.commit(&vals); 
-       
-        // batch opening 
-        timer.bm(
-            &mut || { vc_bbf.batch_open(&opn_vals, &I) }, 
-            "Opening BBF".to_string()
-        );
+        // make data
+        let mut vals: Vec<bool> = 
+            (0..sz).map(|_| rng.gen()).collect();
+        let chks_I:Vec<usize> = (0..*opn_sz).collect();
 
-        // prepare for verification
-        let pi = vc_bbf.batch_open(&opn_vals, &I);
+        let (flat_opn_vals, flat_opn_I) = 
+            yinyan::flatten_chunks(&vals, &chks_I, *chunk_sz);
 
-        // batch verify 
-        timer.bm(
-            &mut || { vc_bbf.batch_verify(&opn_vals, &I, &pi) }, 
-            "Verify BBF".to_string()
-        );
-    }
-    println!("");
+        //let flat_opn_vals:Vec<bool> = I.iter().map( |i| vals[*i].clone() ).collect();
+        let yy_opn_vals = 
+            yinyan::collect_chunks(&flat_opn_vals, &chks_I, *chunk_sz);
+
+
+        println!("-- N_CHUNKS = {}; CHUNK_SZ = {}; (SZ = {}); OPN_SZ =  {} (in bits = {})--", 
+            n_chunks, chunk_sz, sz, opn_sz, opn_sz*chunk_sz);
+        println!("#PRE-YY");
+        {
+            // init VC
+            let config_yy = yinyan::Config { 
+                lambda: L, k: K, n: N, precomp_l: *chunk_sz, size: sz, ph: ph.clone() };
+            let mut vc_yy =
+                yinyan::YinYanVectorCommitment::<Accumulator>::
+                    setup::<RSAGroup, _>(&mut rng, &config_yy);
+
+            let mut acc0 = vc_yy.accs[0].0.clone();
+            let mut acc1 = vc_yy.accs[0].1.clone();
+
+            //println!("Our acc's size: {}", acc0.int_size_bits);
+
+            // commit
+            timer.bm(
+                &mut || { 
+                    let c = commit_yy(&vals, &mut acc0, &mut acc1, &ph);
+                    vc_yy.precompute(&vals);
+                    c
+                    }, 
+                "Committing+Preproc YY".to_string()
+            );
+
+            // prepare for opening
+            vc_yy.commit_simple(&vals); 
+
+
+            let pi_yy = vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I);
+
+            // batch opening 
+            timer.bm(
+                &mut || { vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I) }, 
+                "OpeningFromPreProc YY".to_string()
+            );
+
+            // prepare for verification
+            let pi = vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I);
+
+/*
+            // batch verify 
+            timer.bm(
+                &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
+                "Verify YY".to_string()
+            );
+            */
+        }
+
+        println!("");
     }
 
 }

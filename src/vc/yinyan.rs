@@ -132,6 +132,38 @@ pub fn prove(
     
 } */
 
+pub fn flatten_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> (Vec<bool>, Vec<usize>)
+{
+    let mut rslt_vals:Vec<bool> = vec![];
+    let mut rslt_I:Vec<usize> = vec![];
+
+    for chk_i in chunks_I.iter() {
+        let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
+        for j in chk_rng {
+            rslt_I.push(j);
+            rslt_vals.push(all_vals[j].clone());
+        }
+    }
+    (rslt_vals, rslt_I)
+}
+
+ 
+
+pub fn collect_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> Vec<Vec<bool>>
+{
+    let mut rslt_vals:Vec<Vec<bool>> = vec![];
+
+    for chk_i in chunks_I.iter() {
+        let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
+        let mut cur_chk = vec![];
+        for j in chk_rng {
+            cur_chk.push(all_vals[j].clone());
+        }
+        rslt_vals.push(cur_chk);
+    }
+    rslt_vals
+}
+
 // produces two accumulators---one for the 0-vals; the other for the one-vals
 fn partitioned_prime_prod(ph: &PrimeHash, vs:&Vec<bool>, I:&[usize] ) -> (BigUint, BigUint) {
     let pI = to_primes(ph, &I.to_vec());
@@ -334,7 +366,7 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
     fn precompute_helper(&self, b:bool, ps:&Vec<BigUint>, vals:&Vec<bool>) -> Vec<BigUint>
     {
-        let g = self.uacc.g();
+        let g = if b { self.accs[0].1.g() } else { self.accs[0].0.g() };
         let l = self.precomp_l;
 
         let f = |idx:usize| if vals[idx]==b {ps[idx].clone()} else {BigUint::one()};
@@ -345,24 +377,20 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
         pfs_b
     }
 
-    pub fn precompute(&mut self, vals_:&[Domain])
+    pub fn precompute(&mut self, vals:&Vec<bool>)
     {
         // for now we force this
-        assert_eq!(vals_.len(), self.size);
+        assert_eq!(vals.len(), self.size);
         assert_eq!(self.k, 1); // Temporarily supporting only simple bit domains.
 
         // let's start from square zero
         self.pi_precomp.clear();
 
-        let vals:Vec<bool> = vals_.iter().map(|v| v[0]).collect();
-
         let l:usize = self.precomp_l;
         let ps = all_primes(&self.hash, self.size); // all primes
-        let g = self.uacc.g();
 
         let pfs0 = self.precompute_helper(false, &ps, &vals);
         let pfs1 = self.precompute_helper(true, &ps, &vals);
-
 
         assert_eq!(pfs1.len(), self.precomp_N);
 
@@ -375,7 +403,9 @@ impl<'a, A: 'a + UniversalAccumulator + BatchedAccumulator + FromParts>
 
     pub fn commit_and_precompute(&mut self, vals:&[Domain]) -> Commitment {
         let c = self.commit(vals);
-        self.precompute(vals);
+        let bvals:Vec<bool> = vals.iter().map(|v| v[0]).collect();
+
+        self.precompute(&bvals);
         c
     }
 

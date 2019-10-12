@@ -56,35 +56,7 @@ mod vc_benches {
 
     const SEED:[u8;32] = [2u8;32];
 
-    fn flatten_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> (Vec<bool>, Vec<usize>)
-    {
-        let mut rslt_vals:Vec<bool> = vec![];
-        let mut rslt_I:Vec<usize> = vec![];
 
-        for chk_i in chunks_I.iter() {
-            let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
-            for j in chk_rng {
-                rslt_I.push(j);
-                rslt_vals.push(all_vals[j].clone());
-            }
-        }
-        (rslt_vals, rslt_I)
-    }
-
-    fn collect_chunks(all_vals:&Vec<bool>, chunks_I:&Vec<usize>, chk_sz:usize) -> Vec<Vec<bool>>
-    {
-        let mut rslt_vals:Vec<Vec<bool>> = vec![];
-
-        for chk_i in chunks_I.iter() {
-            let chk_rng = (chk_i*chk_sz..(chk_i+1)*chk_sz);
-            let mut cur_chk = vec![];
-            for j in chk_rng {
-                cur_chk.push(all_vals[j].clone());
-            }
-            rslt_vals.push(cur_chk);
-        }
-        rslt_vals
-    }
 
 
     fn make_vc<'a, A>(chunk_sz: usize, sz: usize, ph: &Rc<PrimeHash>) -> (binary::BinaryVectorCommitment<'a, A>, yinyan::YinYanVectorCommitment<'a, A>)
