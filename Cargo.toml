@@ -62,3 +62,6 @@ name = "custom_bench_client"
 
 [[bin]]
 name = "custom_bench_client_pre"
+
+[[bin]]
+name = "bench_exp"

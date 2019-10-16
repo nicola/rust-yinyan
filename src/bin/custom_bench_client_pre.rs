@@ -129,18 +129,16 @@ fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &
 }
 
 // syntax: chunk_size, n_chunks, opn_size (in chunks)
-static PRE_PARAMS1: &'static [(usize, usize, usize)] = &[
+static PRE_PARAMS: &'static [(usize, usize, usize)] = &[
     (256, 64, 16),
     (256, 128, 32),
     (256, 256, 64),
     (256, 512, 128),
-];
-
-static PRE_PARAMS2: &'static [(usize, usize, usize)] = &[
-    (256, 1024, 256),
+     (256, 1024, 256),
     (256, 2048, 512),
     (256, 4096, 1024)
 ];
+
 
 fn main() {
 
@@ -158,8 +156,9 @@ fn main() {
     let mut timer = ATimer::init(N_SAMPLES);
 
     // sz dependent code
-    for (i,(chunk_sz, n_chunks, opn_sz)) in PRE_PARAMS2.iter().enumerate()
+    for (i,(chunk_sz, n_chunks, _)) in PRE_PARAMS.iter().enumerate()
     {
+
         let sz:usize = n_chunks * chunk_sz;
         let ph = Rc::new(PrimeHash::init(sz));
         
@@ -167,18 +166,10 @@ fn main() {
         // make data
         let mut vals: Vec<bool> = 
             (0..sz).map(|_| rng.gen()).collect();
-        let chks_I:Vec<usize> = (0..*opn_sz).collect();
-
-        let (flat_opn_vals, flat_opn_I) = 
-            yinyan::flatten_chunks(&vals, &chks_I, *chunk_sz);
-
-        //let flat_opn_vals:Vec<bool> = I.iter().map( |i| vals[*i].clone() ).collect();
-        let yy_opn_vals = 
-            yinyan::collect_chunks(&flat_opn_vals, &chks_I, *chunk_sz);
 
 
-        println!("-- N_CHUNKS = {}; CHUNK_SZ = {}; (SZ = {}); OPN_SZ =  {} (in bits = {})--", 
-            n_chunks, chunk_sz, sz, opn_sz, opn_sz*chunk_sz);
+        println!("-- N_CHUNKS = {}; CHUNK_SZ = {}; (SZ = {})--", 
+            n_chunks, chunk_sz, sz);
         println!("#PRE-YY");
         {
             // init VC
@@ -194,6 +185,7 @@ fn main() {
             //println!("Our acc's size: {}", acc0.int_size_bits);
 
             // commit
+            /*
             timer.bm(
                 &mut || { 
                     let c = commit_yy(&vals, &mut acc0, &mut acc1, &ph);
@@ -202,23 +194,34 @@ fn main() {
                     }, 
                 "Committing+Preproc YY".to_string()
             );
+            */
 
             // prepare for opening
-            vc_yy.commit_simple(&vals); 
+            println!("Committing and preprocessing...");
+            vc_yy.precompute(&vals); 
 
+            let openings = vec![1, 8, 64];
+            for opn_sz in openings.iter()  {
+                let chks_I:Vec<usize> = (0..*opn_sz).collect();
 
-            let pi_yy = vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I);
+                let (flat_opn_vals, flat_opn_I) = 
+                    yinyan::flatten_chunks(&vals, &chks_I, *chunk_sz);
 
-            // batch opening 
-            timer.bm(
-                &mut || { vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I) }, 
-                "OpeningFromPreProc YY".to_string()
-            );
+                //let flat_opn_vals:Vec<bool> = I.iter().map( |i| vals[*i].clone() ).collect();
+                let yy_opn_vals = 
+                    yinyan::collect_chunks(&flat_opn_vals, &chks_I, *chunk_sz);
 
+                // batch opening 
+                timer.bm(
+                    &mut || { vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I) }, 
+                    format!("OpeningFromPreProc YY {} (in bits = {})", opn_sz, opn_sz*chunk_sz).to_string()
+                );
+            }
+/*
             // prepare for verification
             let pi = vc_yy.batch_open_from_precomp(&yy_opn_vals, &chks_I);
 
-/*
+
             // batch verify 
             timer.bm(
                 &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
@@ -229,5 +232,6 @@ fn main() {
 
         println!("");
     }
+    
 
 }
