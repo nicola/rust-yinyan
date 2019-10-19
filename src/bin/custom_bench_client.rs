@@ -158,7 +158,7 @@ fn main() {
 
     const N_SAMPLES:u32 = 2;
 
-    let OPN_SIZES = &[256, 2048, 65536];
+    let OPN_SIZES = &[256, 2048, 16384];
 
     //let sz = 512;
 
