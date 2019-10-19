@@ -128,7 +128,7 @@ fn commit_yy(m:&Vec<bool>, acc0:&mut Accumulator, acc1:&mut Accumulator, hash: &
     );
 }
 
-
+/*
 static NON_PRE_PARAMS: &'static [(usize,usize)] = &[
     (512, 64),
     (1024, 128),
@@ -140,6 +140,12 @@ static NON_PRE_PARAMS: &'static [(usize,usize)] = &[
     (65536, 8192),
     (131072, 16384)
 ];
+*/
+
+// commitment sizes
+static NON_PRE_PARAMS: &'static [(usize)] = &[
+    16384 ,  32768 ,  65536 ,  131072 ,  262144 ,  524288 ,  1048576
+];
 
 
 fn main() {
@@ -150,7 +156,9 @@ fn main() {
 
     const SEED:[u8;32] = [2u8;32];
 
-    const N_SAMPLES:u32 = 3;
+    const N_SAMPLES:u32 = 2;
+
+    let OPN_SIZES = &[256, 2048, 65536];
 
     //let sz = 512;
 
@@ -158,7 +166,7 @@ fn main() {
     let mut timer = ATimer::init(N_SAMPLES);
 
     // sz dependent code
-    for (i,(sz, opn_sz)) in NON_PRE_PARAMS.iter().enumerate()
+    for (i,sz) in NON_PRE_PARAMS.iter().enumerate()
     {
 
     let ph = Rc::new(PrimeHash::init(*sz));
@@ -166,10 +174,9 @@ fn main() {
 
     // make data
     let mut vals: Vec<bool> = (0..*sz).map(|_| rng.gen()).collect();
-    let I:Vec<usize> = (0..*opn_sz).collect();
-    let opn_vals:Vec<bool> = I.iter().map(|i| vals[*i].clone()).collect();
 
-    println!("-- SZ = {}; OPN_SZ =  {} --", sz, opn_sz);
+
+    println!("-- SZ = {} --", sz);
     println!("#YY");
     {
         // init VC
@@ -193,21 +200,28 @@ fn main() {
         // prepare for opening
         vc_yy.commit_simple(&vals); 
 
+        for opn_sz in OPN_SIZES.iter() {
 
-        // batch opening 
-        timer.bm(
-            &mut || { vc_yy.batch_open_bits(0, &opn_vals, &I) }, 
-            "Opening YY".to_string()
-        );
+            println!("OPN_SZ =  {} ", *opn_sz);
+            let I:Vec<usize> = (0..*opn_sz).collect();
+            let opn_vals:Vec<bool> = I.iter().map(|i| vals[*i].clone()).collect();
 
-        // prepare for verification
-        let pi = vc_yy.batch_open_bits(0, &opn_vals, &I);
 
-        // batch verify 
-        timer.bm(
-            &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
-            "Verify YY".to_string()
-        );
+            // batch opening 
+            timer.bm(
+                &mut || { vc_yy.batch_open_bits(0, &opn_vals, &I) }, 
+                "Opening YY".to_string()
+            );
+
+            // prepare for verification
+            let pi = vc_yy.batch_open_bits(0, &opn_vals, &I);
+
+            // batch verify 
+            timer.bm(
+                &mut || { vc_yy.batch_verify_bits(0, &opn_vals, &I, &pi) }, 
+                "Verify YY".to_string()
+            );
+        }
     }
 
     println!("#BBF");
@@ -229,20 +243,27 @@ fn main() {
         // prepare for open
         vc_bbf.commit(&vals); 
        
-        // batch opening 
-        timer.bm(
-            &mut || { vc_bbf.batch_open(&opn_vals, &I) }, 
-            "Opening BBF".to_string()
-        );
+        for opn_sz in OPN_SIZES.iter() {
 
-        // prepare for verification
-        let pi = vc_bbf.batch_open(&opn_vals, &I);
+            println!("OPN_SZ =  {} ", *opn_sz);
+            let I:Vec<usize> = (0..*opn_sz).collect();
+            let opn_vals:Vec<bool> = I.iter().map(|i| vals[*i].clone()).collect();
+        
+            // batch opening 
+            timer.bm(
+                &mut || { vc_bbf.batch_open(&opn_vals, &I) }, 
+                "Opening BBF".to_string()
+            );
 
-        // batch verify 
-        timer.bm(
-            &mut || { vc_bbf.batch_verify(&opn_vals, &I, &pi) }, 
-            "Verify BBF".to_string()
-        );
+            // prepare for verification
+            let pi = vc_bbf.batch_open(&opn_vals, &I);
+
+            // batch verify 
+            timer.bm(
+                &mut || { vc_bbf.batch_verify(&opn_vals, &I, &pi) }, 
+                "Verify BBF".to_string()
+            );
+        }
     }
     println!("");
     }
