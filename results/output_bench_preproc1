@@ -1,0 +1,20 @@
+-- N_CHUNKS = 64; CHUNK_SZ = 256; (SZ = 16384); OPN_SZ =  16 (in bits = 4096)--
+#PRE-YY
+[Timing] Committing+Preproc YY: 51.55822972s
+[Timing] OpeningFromPreProc YY: 11.51359238s
+
+-- N_CHUNKS = 128; CHUNK_SZ = 256; (SZ = 32768); OPN_SZ =  32 (in bits = 8192)--
+#PRE-YY
+[Timing] Committing+Preproc YY: 116.067476413s
+[Timing] OpeningFromPreProc YY: 29.481690068s
+
+-- N_CHUNKS = 256; CHUNK_SZ = 256; (SZ = 65536); OPN_SZ =  64 (in bits = 16384)--
+#PRE-YY
+[Timing] Committing+Preproc YY: 263.367726439s
+[Timing] OpeningFromPreProc YY: 73.630482545s
+
+-- N_CHUNKS = 512; CHUNK_SZ = 256; (SZ = 131072); OPN_SZ =  128 (in bits = 32768)--
+#PRE-YY
+[Timing] Committing+Preproc YY: 606.620665696s
+[Timing] OpeningFromPreProc YY: 182.912368989s
+

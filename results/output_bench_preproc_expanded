@@ -1,0 +1,49 @@
+-- N_CHUNKS = 64; CHUNK_SZ = 256; (SZ = 16384)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 197.309µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.27582927s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.621315919s
+
+-- N_CHUNKS = 128; CHUNK_SZ = 256; (SZ = 32768)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 200.35µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.265468676s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.525435594s
+
+-- N_CHUNKS = 256; CHUNK_SZ = 256; (SZ = 65536)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 207.529µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.272917144s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.567941702s
+
+-- N_CHUNKS = 512; CHUNK_SZ = 256; (SZ = 131072)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 205.421µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.26725324s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.472631552s
+
+-- N_CHUNKS = 1024; CHUNK_SZ = 256; (SZ = 262144)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 207.091µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.260862057s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.479573193s
+
+-- N_CHUNKS = 2048; CHUNK_SZ = 256; (SZ = 524288)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 209.839µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.274228148s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.464696838s
+
+-- N_CHUNKS = 4096; CHUNK_SZ = 256; (SZ = 1048576)--
+#PRE-YY
+Committing and preprocessing...
+[Timing] OpeningFromPreProc YY 1 (in bits = 256): 207.451µs
+[Timing] OpeningFromPreProc YY 8 (in bits = 2048): 4.261068046s
+[Timing] OpeningFromPreProc YY 64 (in bits = 16384): 73.571279013s
+

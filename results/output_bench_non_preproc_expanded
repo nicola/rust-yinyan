@@ -1,0 +1,168 @@
+-- SZ = 16384 --
+#YY
+[Timing] Committing YY: 18.206685789s
+OPN_SZ =  256 
+[Timing] Opening YY: 5.562847056s
+[Timing] Verify YY: 3.185559ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 5.697567904s
+[Timing] Verify YY: 8.803778ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 5.892360112s
+[Timing] Verify YY: 308.529086ms
+#BBF
+[Timing] Committing BBF: 3.427321255s
+OPN_SZ =  256 
+[Timing] Opening BBF: 5.864758542s
+[Timing] Verify BBF: 8.377427ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 7.95794532s
+[Timing] Verify BBF: 14.516099ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 24.001751458s
+[Timing] Verify BBF: 314.024355ms
+
+-- SZ = 32768 --
+#YY
+[Timing] Committing YY: 37.409183095s
+OPN_SZ =  256 
+[Timing] Opening YY: 11.170646912s
+[Timing] Verify YY: 3.300534ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 11.339135366s
+[Timing] Verify YY: 8.467609ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 12.58172325s
+[Timing] Verify YY: 309.612036ms
+#BBF
+[Timing] Committing BBF: 7.551349975s
+OPN_SZ =  256 
+[Timing] Opening BBF: 11.694694409s
+[Timing] Verify BBF: 7.923408ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 14.753084747s
+[Timing] Verify BBF: 12.970864ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 38.237525233s
+[Timing] Verify BBF: 315.703967ms
+
+-- SZ = 65536 --
+#YY
+[Timing] Committing YY: 79.779542527s
+OPN_SZ =  256 
+[Timing] Opening YY: 22.443109334s
+[Timing] Verify YY: 2.697005ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 22.835332853s
+[Timing] Verify YY: 8.549816ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 25.962146934s
+[Timing] Verify YY: 309.604042ms
+#BBF
+[Timing] Committing BBF: 17.525564395s
+OPN_SZ =  256 
+[Timing] Opening BBF: 23.256885365s
+[Timing] Verify BBF: 8.380394ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 28.09653166s
+[Timing] Verify BBF: 13.491792ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 66.158365328s
+[Timing] Verify BBF: 313.549668ms
+
+-- SZ = 131072 --
+#YY
+[Timing] Committing YY: 180.211796423s
+OPN_SZ =  256 
+[Timing] Opening YY: 44.677819597s
+[Timing] Verify YY: 2.786172ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 45.441789846s
+[Timing] Verify YY: 9.666119ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 52.415929097s
+[Timing] Verify YY: 309.084857ms
+#BBF
+[Timing] Committing BBF: 44.782056134s
+OPN_SZ =  256 
+[Timing] Opening BBF: 45.49419371s
+[Timing] Verify BBF: 7.337949ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 54.169828372s
+[Timing] Verify BBF: 13.187866ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 122.682238283s
+[Timing] Verify BBF: 314.887927ms
+
+-- SZ = 262144 --
+#YY
+[Timing] Committing YY: 442.167309929s
+OPN_SZ =  256 
+[Timing] Opening YY: 88.975113145s
+[Timing] Verify YY: 3.822239ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 91.452415622s
+[Timing] Verify YY: 9.41678ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 104.632262329s
+[Timing] Verify YY: 309.097218ms
+#BBF
+[Timing] Committing BBF: 129.691666622s
+OPN_SZ =  256 
+[Timing] Opening BBF: 90.718921126s
+[Timing] Verify BBF: 7.507592ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 108.686781801s
+[Timing] Verify BBF: 12.785448ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 238.066996926s
+[Timing] Verify BBF: 313.16539ms
+
+-- SZ = 524288 --
+#YY
+[Timing] Committing YY: 1212.35817218s
+OPN_SZ =  256 
+[Timing] Opening YY: 178.944034734s
+[Timing] Verify YY: 4.152452ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 182.289000961s
+[Timing] Verify YY: 8.588107ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 210.403214326s
+[Timing] Verify YY: 310.015924ms
+#BBF
+[Timing] Committing BBF: 428.218365732s
+OPN_SZ =  256 
+[Timing] Opening BBF: 184.858928147s
+[Timing] Verify BBF: 7.453104ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 222.472089851s
+[Timing] Verify BBF: 12.947381ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 521.894416861s
+[Timing] Verify BBF: 313.515367ms
+
+-- SZ = 1048576 --
+#YY
+[Timing] Committing YY: 4246.980828539s
+OPN_SZ =  256 
+[Timing] Opening YY: 357.498678617s
+[Timing] Verify YY: 3.238759ms
+OPN_SZ =  2048 
+[Timing] Opening YY: 362.49824462s
+[Timing] Verify YY: 9.329311ms
+OPN_SZ =  16384 
+[Timing] Opening YY: 423.483899099s
+[Timing] Verify YY: 312.78303ms
+#BBF
+[Timing] Committing BBF: 1794.680883838s
+OPN_SZ =  256 
+[Timing] Opening BBF: 370.817939534s
+[Timing] Verify BBF: 7.088729ms
+OPN_SZ =  2048 
+[Timing] Opening BBF: 453.284095006s
+[Timing] Verify BBF: 13.029526ms
+OPN_SZ =  16384 
+[Timing] Opening BBF: 1100.100378903s
+[Timing] Verify BBF: 315.095319ms
+
