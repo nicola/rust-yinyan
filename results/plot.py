@@ -28,7 +28,12 @@ def from_file(path):
 V_SZs = [16384 ,  32768 ,  65536 ,  131072 ,  262144 ,  524288 ,  1048576]
 LOG_V_SZs = [i for i in range(14, 21)]
 OPN_SZs = [256, 2048, 16384]
-N_AMORTS = list(range(10,500,20))
+
+
+N_AMORTS = list(range(10,1000,20))
+# Next values are for amortization
+v_sz_idx = 4 # 128K bits
+opn_idx = 1 # many bits opening
 
 LBLs = ['pre_yy', 'yy', 'bbf']
 
@@ -39,8 +44,7 @@ def data_vfy_files(s):
     return [f'vfy_{s}_{o}' for o in OPN_SZs]
 
 def extend_to_amm(d, m):
-    v_sz_idx = 3 # 131072 bits
-    opn_idx = 2 # many bits opening
+    
     l = len(V_SZs)
     compute_amm = lambda c, o: c/m + o
     return compute_amm(d['com'][v_sz_idx], d['opn'][opn_idx][v_sz_idx]) 
@@ -54,6 +58,8 @@ def mk_record(lbl):
 
     # add ammortized times
     basic_record['amort'] = [extend_to_amm(basic_record, m) for m in N_AMORTS]
+    print(lbl)
+    print(basic_record['amort'])
 
     return basic_record
 
@@ -116,6 +122,8 @@ def mk_plt_amort(ax, plotName, scmLbls, opn_aux = None):
     #ax.set_xticklabels(X)
 
     #ax.set_yticks([10**i for i in range(1, 2)])
+    ax.set_yticklabels([1, 5, 10, 25, 50, 100])
+
 
 
     for scm in scmLbls:
@@ -149,7 +157,7 @@ if __name__ == '__main__':
         'opn', LBLs, opn_aux = 1)
 
     # Amortized times
-    mk_plt_amort(axs[2,0], f"Amortized Opening (of 256 bits)", LBLs)
+    mk_plt_amort(axs[2,0], f"Amortized Opening (of {OPN_SZs[opn_idx]} bits)", LBLs)
 
 
 
