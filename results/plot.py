@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sys import exit
+from sys import argv
 
 # return times in seconds
 def process_time(s):
@@ -58,8 +59,8 @@ def mk_record(lbl):
 
     # add ammortized times
     basic_record['amort'] = [extend_to_amm(basic_record, m) for m in N_AMORTS]
-    print(lbl)
-    print(basic_record['amort'])
+    #print(lbl)
+    #print(basic_record['amort'])
 
     return basic_record
 
@@ -74,7 +75,8 @@ def add_plot_info(info_lbl, lst):
     plt_info[info_lbl] = {LBLs[i] : lst[i] for i in range(3) }
 
 add_plot_info('color', ['red', 'orange', 'green'])
-add_plot_info('marker', ['+', '|', 'x'])
+add_plot_info('marker', ['', '+', 'x'])
+add_plot_info('lbl', ['This work\n(precomp.)', 'This work', 'BBF18'])
 
 def get_data(c, s, opn_aux):
     if opn_aux is None:
@@ -84,6 +86,8 @@ def get_data(c, s, opn_aux):
 
 def mk_plt(ax, plotName, cat, scmLbls, opn_aux = None):
     X = V_SZs
+
+
     
     ax.grid(True)
     ax.set(
@@ -91,19 +95,27 @@ def mk_plt(ax, plotName, cat, scmLbls, opn_aux = None):
         ylabel = "Running Time in Seconds",
         xlabel = 'Size of Committed Vector in Bits (log scale)',
         xscale = "log",
+        xlim = (X[0]-3000, X[-1]+300000),
         yscale = "log")
     ax.set_xticks(X)
     ax.set_xticklabels(X)
 
+    if cat == 'opn' and opn_aux == 2:
+        X = X[2:]
+        
 
     for scm in scmLbls:
         d = get_data(cat, scm, opn_aux)
+        # cut openings that are too small:
+        if cat == 'opn' and opn_aux == 2:
+            d = d[2:]
+            
         ax.plot(
             X,
             d, 
             marker = plt_info['marker'][scm],
             color = plt_info['color'][scm],
-            label = scm)
+            label = plt_info['lbl'][scm])
         ax.legend()
 
 def mk_plt_amort(ax, plotName, scmLbls, opn_aux = None):
@@ -138,29 +150,34 @@ def mk_plt_amort(ax, plotName, scmLbls, opn_aux = None):
 
 
 if __name__ == '__main__':
-    fig, axs = plt.subplots(3, 3, figsize = (25,13))
-    axcomm = axs[0,0]
+    cmds = ['com', 'opn', 'amort']
+    if len(argv) < 2 or not argv[1] in cmds:
+        print("Give a command: com, opn, amort")
+        exit(1)
+    
+    if argv[1] == 'com':
+        fig, axs = plt.subplots(1, 1, figsize = (8,5.5))
+        axcomm = axs
 
-    # No preprocessing commitment plot
-    mk_plt(axcomm, "Commitment (No Preprocessing)", 'com', ['yy', 'bbf'])
+        # No preprocessing commitment plot
+        mk_plt(axcomm, "Commitment (No Preprocessing)", 'com', ['yy', 'bbf'])
+    elif argv[1] == 'opn':
+        fig, axs = plt.subplots(1, 3, figsize = (28,4.5))
+
+        # Opening commitment
+        for i in range(3):
+            opn_aux = OPN_SZs[i]
+
+            # Opening 
+            mk_plt(axs[i], f"Opening (# of bits open = {opn_aux})",
+                'opn', LBLs, opn_aux = i)
+
+    elif argv[1] == 'amort':
+        fig, axs = plt.subplots(1, 1, figsize = (7.5, 5))
+
+        # Amortized times
+        mk_plt_amort(axs, f"Amortized Opening (of {OPN_SZs[opn_idx]} bits)", LBLs)
 
 
-    # Verification and opening commitment
-    #for i in range(3):
-    i = 1
-    opn_aux = OPN_SZs[i]
-
-    # Opening 
-    mk_plt(axs[1,1], f"Opening (# of bits open = {opn_aux})",
-        'opn', LBLs, opn_aux = 0)
-    mk_plt(axs[1,1], f"Opening (# of bits open = {opn_aux})",
-        'opn', LBLs, opn_aux = 1)
-
-    # Amortized times
-    mk_plt_amort(axs[2,0], f"Amortized Opening (of {OPN_SZs[opn_idx]} bits)", LBLs)
-
-
-
-
-    plt.tight_layout(pad=3, w_pad=2.5, h_pad=2.5)
+    plt.tight_layout(pad=1, w_pad=1.5, h_pad=1.5)
     plt.show()
