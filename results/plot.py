@@ -76,6 +76,7 @@ def add_plot_info(info_lbl, lst):
 
 add_plot_info('color', ['red', 'orange', 'green'])
 add_plot_info('marker', ['', '+', 'x'])
+add_plot_info('amort_marker', ['.', '+', 'x'])
 add_plot_info('lbl', ['This work\n(precomp.)', 'This work', 'BBF18'])
 
 def get_data(c, s, opn_aux):
@@ -143,9 +144,9 @@ def mk_plt_amort(ax, plotName, scmLbls, opn_aux = None):
         ax.plot(
             X,
             d, 
-            marker = plt_info['marker'][scm],
+            marker = plt_info['amort_marker'][scm],
             color = plt_info['color'][scm],
-            label = scm)
+            label = plt_info['lbl'][scm])
         ax.legend()
 
 
@@ -162,7 +163,7 @@ if __name__ == '__main__':
         # No preprocessing commitment plot
         mk_plt(axcomm, "Commitment (No Preprocessing)", 'com', ['yy', 'bbf'])
     elif argv[1] == 'opn':
-        fig, axs = plt.subplots(1, 3, figsize = (28,4.5))
+        fig, axs = plt.subplots(3, 1, figsize = (5, 8))
 
         # Opening commitment
         for i in range(3):
